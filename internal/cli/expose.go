@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"net/http"
 	"time"
@@ -29,7 +30,7 @@ func (a *app) expose(args []string) error {
 	ctx := context.Background()
 	switch args[0] {
 	case "tailnet":
-		return a.exposeTailnet(ctx, s)
+		return a.exposeTailnet(ctx, s, args[1:])
 	case "public":
 		return a.exposePublic(ctx, s, args[1:])
 	case "lan": // hidden for now, so the error below doesn't list it
@@ -40,9 +41,26 @@ func (a *app) expose(args []string) error {
 	return fmt.Errorf("unknown option %q. Choose tailnet, public or local", args[0])
 }
 
-func (a *app) exposeTailnet(ctx context.Context, s config.State) error {
+func (a *app) exposeTailnet(ctx context.Context, s config.State, args []string) error {
+	fs := flag.NewFlagSet("expose tailnet", flag.ContinueOnError)
+	assume := fs.Bool("yes", false, "don't ask for confirmation")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	if !s.SignupsClosed {
 		return errors.New("signups are still open, so anyone who reaches this could register. Finish with: ezvaultwarden init")
+	}
+	if s.Mode == "public" && !*assume {
+		fmt.Fprintln(a.out, "This moves your vault to Tailscale. Your account, passwords and backups stay.")
+		fmt.Fprintf(a.out, "  %s stops working straight away.\n", s.URL())
+		fmt.Fprintln(a.out, "  Only devices running Tailscale will be able to connect.")
+		yes, err := a.confirm("Continue?", true)
+		if err != nil {
+			return err
+		}
+		if !yes {
+			return errors.New("nothing changed")
+		}
 	}
 	host, err := a.startServing(ctx, fmt.Sprintf("http://127.0.0.1:%d", s.BackendPort))
 	if err != nil {
@@ -66,8 +84,13 @@ func (a *app) exposeTailnet(ctx context.Context, s config.State) error {
 		return err
 	}
 	fmt.Fprintln(a.out, "  Not reachable from the public internet.")
+	fmt.Fprintln(a.out, "  Only devices running Tailscale can connect, so install it on each one.")
 	fmt.Fprintln(a.out, "  This machine's name is now in public certificate logs.")
 	a.warn("Apps set to the old address need the new one. See: ezvaultwarden connect")
+	if before.Mode == "public" {
+		fmt.Fprintf(a.out, "\nYou can now delete the DNS record for %s at your domain provider.\n", before.Hostname)
+		fmt.Fprintf(a.out, "To go back: ezvaultwarden expose public --domain %s\n", before.Hostname)
+	}
 	return nil
 }
 

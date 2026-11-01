@@ -357,3 +357,40 @@ func TestStatusNoticesAProxyTurnedOnLater(t *testing.T) {
 		t.Fatalf("no warning: %s", h.output)
 	}
 }
+
+func publicVault(t *testing.T, h *harness) {
+	t.Helper()
+	s, _ := h.load()
+	s.Mode, s.Hostname = "public", myDomain
+	if err := config.Save(h.paths, s); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLeavingPublicExplainsTheSwitch(t *testing.T) {
+	h, ts, _ := planSetup(t, "y\n")
+	publicVault(t, h)
+	if err := h.expose([]string{"tailnet"}); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := h.load(); s.Mode != "tailnet" || ts.served == "" {
+		t.Fatalf("%+v", s)
+	}
+	for _, want := range []string{"passwords and backups stay", "stops working straight away", "install it on each one",
+		"delete the DNS record for " + myDomain, "expose public --domain " + myDomain} {
+		if !strings.Contains(h.output.String(), want) {
+			t.Fatalf("missing %q: %s", want, h.output)
+		}
+	}
+}
+
+func TestSayingNoToLeavingPublicChangesNothing(t *testing.T) {
+	h, ts, _ := planSetup(t, "n\n")
+	publicVault(t, h)
+	if err := h.expose([]string{"tailnet"}); err == nil {
+		t.Fatal("expected a refusal")
+	}
+	if s, _ := h.load(); s.Mode != "public" || ts.served != "" {
+		t.Fatalf("%+v", s)
+	}
+}

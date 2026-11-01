@@ -158,6 +158,9 @@ with `--delete-data`, after you type `delete my vault`.
 $ ezvaultwarden expose tailnet
 ✓ Available to your devices at https://vault.tail1234.ts.net
   Not reachable from the public internet.
+  Only devices running Tailscale can connect, so install it on each one.
+  This machine's name is now in public certificate logs.
+⚠ Apps set to the old address need the new one. See: ezvaultwarden connect
 
 $ ezvaultwarden expose public --domain vault.mydomain.com
 ✓ Port 443 is free, and vault.mydomain.com points to this machine
