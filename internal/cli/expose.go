@@ -68,6 +68,9 @@ func (a *app) exposeTailnet(ctx context.Context, s config.State) error {
 		}
 		return err
 	}
+	if before.Mode == "lan" {
+		a.dropDNS(ctx, before)
+	}
 	if err := a.reachable(ctx, s.URL()); err != nil {
 		a.warn("It didn't answer at %s yet: %v", s.URL(), err)
 		fmt.Fprintln(a.out, "  The first certificate can take a minute. Try the address in a browser.")
@@ -85,6 +88,7 @@ func (a *app) exposeLocal(ctx context.Context, s config.State) error {
 		a.ok("Already local at %s", s.URL())
 		return nil
 	}
+	before := s
 	if s.Mode == "tailnet" {
 		if err := a.ts.StopServing(ctx); err != nil {
 			return err
@@ -94,9 +98,7 @@ func (a *app) exposeLocal(ctx context.Context, s config.State) error {
 	if err := a.applyMode(ctx, s); err != nil {
 		return err
 	}
-	if err := a.forgetDNSToken(); err != nil {
-		return err
-	}
+	a.dropDNS(ctx, before)
 	a.ok("Back to this machine only, at %s", s.URL())
 	a.warn("Apps set to the old address need the new one. See: ezvaultwarden connect")
 	return nil

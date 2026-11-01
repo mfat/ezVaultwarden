@@ -154,13 +154,17 @@ Fix these first, or re-run with --accept-risk.
 $ ezvaultwarden expose lan --domain vault.example.com --dns cloudflare
 This makes your vault login page reachable from every device on your network,
 at https://vault.example.com:8443. Nothing is opened to the internet by this.
-The name vault.example.com goes into public certificate logs.
+The name vault.example.com goes into public certificate logs, and public DNS
+will show this machine's local address.
 Continuing accepts Let's Encrypt's terms: https://letsencrypt.org/repository/
 Continue? [y/N] y
-Create a Cloudflare API token with Zone:Read and DNS:Edit for this domain.
+ezVaultwarden needs a Cloudflare API token. On the page that opens, narrow it to
+this domain, create it, and paste it here:
+  https://dash.cloudflare.com/profile/api-tokens?...
 Cloudflare API token:
 ✓ Certificate issued for vault.example.com, renews automatically
 ✓ Available on your network at https://vault.example.com:8443
+✓ vault.example.com points to this machine, 192.168.1.20
 ```
 
 ## What can't be fully smooth
@@ -173,8 +177,9 @@ Cloudflare API token:
 - **Tailscale setup.** `expose tailnet` needs MagicDNS and HTTPS turned on in the
   Tailscale admin console, plus one `sudo tailscale set --operator=$USER`. It names
   each step when it's missing. The machine's name ends up in public certificate logs.
-- **DNS and firewall for `lan`.** The user adds a DNS-only record pointing at the
-  machine, and may need to allow the port. We say so, but don't change either.
+- **Firewalls and routers for `lan`.** The user may need to allow the port. Some routers
+  also block public DNS answers holding a private address, as rebinding protection.
+- **The Cloudflare token.** Creating one takes a logged-in person. See decisions.
 - **`curl | sh`.** Convenient, but some people won't like it, so manual download
   stays documented.
 - **WSL.** Windows browsers need the certificate imported by hand, and WSL can stop

@@ -17,6 +17,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/mfat/ezVaultwarden/internal/backup"
+	"github.com/mfat/ezVaultwarden/internal/cloudflare"
 	"github.com/mfat/ezVaultwarden/internal/config"
 	"github.com/mfat/ezVaultwarden/internal/runtime"
 	"github.com/mfat/ezVaultwarden/internal/tailscale"
@@ -57,6 +58,8 @@ type app struct {
 	reachable func(ctx context.Context, url string) error
 	ts        tailnet
 	issue     func(ctx context.Context, host string) error
+	dns       func(token string) dnsHost
+	openLink  func(url string)
 }
 
 // Run executes one command and returns the process exit code.
@@ -78,6 +81,8 @@ func Run(args []string) int {
 	}
 	a.health = a.verify
 	a.issue = a.issueCert
+	a.dns = func(token string) dnsHost { return cloudflare.New(token) }
+	a.openLink = openBrowser
 	if len(args) == 0 {
 		fmt.Fprint(a.out, usage)
 		return 0

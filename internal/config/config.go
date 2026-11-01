@@ -48,6 +48,7 @@ func (p Paths) PendingKey() string { return p.join("backup-key.pending") }
 func (p Paths) Tools() string      { return p.join("tools") }
 func (p Paths) Lego() string       { return p.join("lego") }
 func (p Paths) DNSToken() string   { return p.join("dns-token") }
+func (p Paths) CertCheck() string  { return p.join("lego", "last-check") }
 func (p Paths) CertFile(host string) string {
 	return p.join("lego", "certificates", host+".crt")
 }

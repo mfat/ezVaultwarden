@@ -20,17 +20,46 @@ import (
 
 const domain = "vault.example.com"
 
+type fakeDNS struct {
+	zoneErr  error
+	pointErr error
+	tokens   []string
+	points   []string
+	removed  int
+	opened   int
+}
+
+func (f *fakeDNS) Zone(context.Context, string) (string, error) { return "zone1", f.zoneErr }
+func (f *fakeDNS) Point(_ context.Context, _, host, ip string) error {
+	if f.pointErr == nil {
+		f.points = append(f.points, host+"="+ip)
+	}
+	return f.pointErr
+}
+func (f *fakeDNS) Remove(context.Context, string, string) error { f.removed++; return nil }
+
 func lanSetup(t *testing.T, input string) (*harness, *fakeTailnet, *int) {
+	h, ts, _, issued := lanSetupDNS(t, input)
+	return h, ts, issued
+}
+
+func lanSetupDNS(t *testing.T, input string) (*harness, *fakeTailnet, *fakeDNS, *int) {
 	t.Helper()
 	h, ts := exposeSetup(t)
 	h.in = reader(input)
+	dns := &fakeDNS{}
+	h.dns = func(token string) dnsHost {
+		dns.tokens = append(dns.tokens, token)
+		return dns
+	}
+	h.openLink = func(string) { dns.opened++ }
 	issued := new(int)
 	h.issue = func(_ context.Context, host string) error {
 		*issued++
 		writeCert(t, h, host, 60*24*time.Hour)
 		return nil
 	}
-	return h, ts, issued
+	return h, ts, dns, issued
 }
 
 // writeCert plants a certificate as lego would leave it.
@@ -189,6 +218,108 @@ func TestUninstallForgetsTheToken(t *testing.T) {
 	}
 	if _, err := os.Stat(h.paths.DNSToken()); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("token kept: %v", err)
+	}
+}
+
+func TestTokenIsCheckedBeforeItIsSaved(t *testing.T) {
+	h, _, dns, issued := lanSetupDNS(t, "y\nbad-token\n")
+	dns.zoneErr = errors.New("refused")
+	if err := h.expose(lanArgs()); err == nil {
+		t.Fatal("expected an error")
+	}
+	if _, err := os.Stat(h.paths.DNSToken()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a bad token was saved: %v", err)
+	}
+	if *issued != 0 {
+		t.Fatal("asked for a certificate with a bad token")
+	}
+}
+
+func TestSetupOpensTheTokenPageOnce(t *testing.T) {
+	h, _, dns, _ := lanSetupDNS(t, "y\ntoken\n")
+	if err := h.expose(lanArgs()); err != nil {
+		t.Fatal(err)
+	}
+	if dns.opened != 1 || !strings.Contains(h.output.String(), "dash.cloudflare.com") {
+		t.Fatalf("opened %d: %s", dns.opened, h.output)
+	}
+}
+
+func TestAWorkingSavedTokenIsReused(t *testing.T) {
+	h, _, dns, _ := lanSetupDNS(t, "y\n")
+	if err := config.WritePrivate(h.paths.DNSToken(), []byte("saved\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.expose(lanArgs()); err != nil {
+		t.Fatal(err)
+	}
+	if dns.opened != 0 || dns.tokens[0] != "saved" {
+		t.Fatalf("opened %d, tokens %v", dns.opened, dns.tokens)
+	}
+}
+
+func TestExposeLANSetsTheDNSRecord(t *testing.T) {
+	h, _, dns, _ := lanSetupDNS(t, "y\ntoken\n")
+	if err := h.expose(lanArgs()); err != nil {
+		t.Fatal(err)
+	}
+	if outboundIP() != "" && (len(dns.points) != 1 || !strings.HasPrefix(dns.points[0], domain+"=")) {
+		t.Fatalf("points: %v", dns.points)
+	}
+}
+
+func TestAFailedDNSRecordFallsBackToInstructions(t *testing.T) {
+	if outboundIP() == "" {
+		t.Skip("no network")
+	}
+	h, _, dns, _ := lanSetupDNS(t, "y\ntoken\n")
+	dns.pointErr = errors.New("left alone")
+	if err := h.expose(lanArgs()); err != nil {
+		t.Fatalf("the vault works, so this isn't a failure: %v", err)
+	}
+	if !strings.Contains(h.output.String(), "add a DNS-only record") {
+		t.Fatalf("no instructions: %s", h.output)
+	}
+}
+
+func TestLeavingLANRemovesTheRecordAndToken(t *testing.T) {
+	for _, mode := range []string{"local", "tailnet"} {
+		h, _, dns, _ := lanSetupDNS(t, "y\ntoken\n")
+		if err := h.expose(lanArgs()); err != nil {
+			t.Fatal(err)
+		}
+		if err := h.expose([]string{mode}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(h.paths.DNSToken()); dns.removed != 1 || !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s: removed %d, token: %v", mode, dns.removed, err)
+		}
+	}
+}
+
+func TestRenewalFollowsTheAddressHourlyButChecksTheCertDaily(t *testing.T) {
+	if outboundIP() == "" {
+		t.Skip("no network")
+	}
+	h, _, dns, issued := lanSetupDNS(t, "y\ntoken\n")
+	if err := h.expose(lanArgs()); err != nil {
+		t.Fatal(err)
+	}
+	dns.points, *issued = nil, 0
+	for range 3 {
+		if err := h.renewCert(nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(dns.points) != 3 || *issued != 1 {
+		t.Fatalf("points %d, issued %d", len(dns.points), *issued)
+	}
+	h.now = func() time.Time { return time.Date(2026, 11, 2, 4, 0, 0, 0, time.UTC) }
+	if err := h.renewCert(nil); err != nil {
+		t.Fatal(err)
+	}
+	if *issued != 2 {
+		t.Fatalf("issued %d the next day", *issued)
 	}
 }
 

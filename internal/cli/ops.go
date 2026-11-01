@@ -249,9 +249,7 @@ func (a *app) uninstall(args []string) error {
 			a.warn("Couldn't stop Tailscale serving the vault: %v", err)
 		}
 	}
-	if err := a.forgetDNSToken(); err != nil {
-		a.warn("Couldn't delete the DNS token at %s: %v", a.paths.DNSToken(), err)
-	}
+	a.dropDNS(context.Background(), s)
 	if err := a.rt.Remove(); err != nil {
 		return err
 	}

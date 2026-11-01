@@ -42,6 +42,7 @@ It stays on the same port, because 443 would need root.
 | `internal/backup` | Encrypted archives |
 | `internal/vault` | Reads the account list. Never touches vault contents |
 | `internal/tailscale` | Drives the `tailscale` command |
+| `internal/cloudflare` | Manages the one DNS record for `lan` mode |
 
 `internal/runtime.Runtime` is the seam for Docker and Podman. Only `systemd.go`
 knows how services run, so backups, updates and safety checks stay shared.
@@ -62,15 +63,16 @@ Everything lives in `~/.local/share/ezvaultwarden`, or `$EZVAULTWARDEN_HOME`.
 | `data.before-update` | Plain copy for rollback, replaced each update |
 | `data.before-restore-*`, `data.replaced-*` | Plain copies. Not yet cleaned up |
 | `backup-key.pending` | Only until the user confirms saving the key |
-| `lego/` | `lego`'s account and the certificate, in `lan` mode |
+| `lego/` | `lego`'s account, the certificate and the last check, in `lan` mode |
 | `dns-token` | Cloudflare token for renewals, owner-only. Removed by `expose local` and `uninstall` |
 | `tools/lego-<version>/` | Fetched by the first `expose lan`, then verified the same way |
 | `linger-enabled` | Marks that we turned on lingering, so `uninstall` can undo it |
 
 Units live in `~/.config/systemd/user`: `ezvaultwarden-server`,
 `ezvaultwarden-proxy`, and a service and timer each for `ezvaultwarden-backup` and
-`ezvaultwarden-cert`. The certificate timer runs daily and does nothing outside `lan`
-mode. Caddy reads certificate files only at start, so it restarts after a renewal.
+`ezvaultwarden-cert`. The certificate timer runs hourly to follow local address
+changes, checks the certificate once a day, and does nothing outside `lan` mode. Caddy
+reads certificate files only at start, so it restarts after a renewal.
 
 ## Downloads
 

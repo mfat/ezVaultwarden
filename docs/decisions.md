@@ -65,6 +65,18 @@ The token stays in a file `lego` reads itself, so it's never in a process list. 
 register no email: Let's Encrypt has stopped sending expiry mail, so `status` warns
 instead.
 
+## The token stays, for now
+
+Nginx Proxy Manager and similar tools also ask for a pasted token, because creating one
+takes a logged-in person. So we cut everything around it: a pre-filled page, a check
+before saving, and a DNS record we create and keep up to date. Only records carrying
+our comment are ever changed or deleted, so a name already in use is left alone.
+
+Cloudflare's OAuth with PKCE could replace the paste with an Approve click. It needs a
+loopback redirect and a DNS scope to be confirmed, has no device flow for headless
+machines, and reaches every domain in the account rather than one, so the token would
+stay as the fallback. DNS-PERSIST-01 would be better still once Let's Encrypt offers it.
+
 ## Backups encrypted to a public key
 
 The first design used a word passphrase. That would have meant storing a secret on

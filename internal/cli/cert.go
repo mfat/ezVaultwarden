@@ -17,9 +17,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mfat/ezVaultwarden/internal/cloudflare"
 	"github.com/mfat/ezVaultwarden/internal/config"
 	"github.com/mfat/ezVaultwarden/internal/fetch"
 )
+
+// dnsHost is the part of a DNS provider we need.
+type dnsHost interface {
+	Zone(ctx context.Context, host string) (string, error)
+	Point(ctx context.Context, zone, host, ip string) error
+	Remove(ctx context.Context, zone, host string) error
+}
 
 // The name reaches the Caddyfile and lego's arguments, so only a plain hostname
 // gets through.
@@ -45,7 +53,8 @@ func (a *app) exposeLAN(ctx context.Context, s config.State, args []string) erro
 	}
 	fmt.Fprintf(a.out, "This makes your vault login page reachable from every device on your network,\n")
 	fmt.Fprintf(a.out, "at https://%s:%d. Nothing is opened to the internet by this.\n", host, s.Port)
-	fmt.Fprintf(a.out, "The name %s goes into public certificate logs.\n", host)
+	fmt.Fprintf(a.out, "The name %s goes into public certificate logs, and public DNS\n", host)
+	fmt.Fprintln(a.out, "will show this machine's local address.")
 	fmt.Fprintln(a.out, "Continuing accepts Let's Encrypt's terms: https://letsencrypt.org/repository/")
 	if !*assume {
 		yes, err := a.confirm("Continue?", false)
@@ -56,7 +65,7 @@ func (a *app) exposeLAN(ctx context.Context, s config.State, args []string) erro
 			return errors.New("nothing changed")
 		}
 	}
-	if err := a.saveDNSToken(); err != nil {
+	if err := a.saveDNSToken(ctx, host); err != nil {
 		return err
 	}
 	fmt.Fprintln(a.out, "  Requesting a certificate. This can take a minute or two...")
@@ -92,17 +101,24 @@ func (a *app) exposeLAN(ctx context.Context, s config.State, args []string) erro
 	}
 	a.ok("Available on your network at %s", s.URL())
 	a.warn("Apps set to the old address need the new one. See: ezvaultwarden connect")
-	a.pointDNS(host, s.Port)
+	a.pointDNS(ctx, s)
+	fmt.Fprintf(a.out, "  If a firewall is on, allow port %d from your network.\n", s.Port)
 	return nil
 }
 
-// saveDNSToken keeps the token for renewals, owner-only, and reuses one saved
-// by an earlier run.
-func (a *app) saveDNSToken() error {
-	if _, err := os.Stat(a.paths.DNSToken()); err == nil {
-		return nil
+// saveDNSToken keeps a token that works for host, owner-only, for renewals. A
+// bad one is never saved, so a typo can't get stuck.
+func (a *app) saveDNSToken(ctx context.Context, host string) error {
+	if token, err := a.savedToken(); err == nil {
+		if _, err := a.dns(token).Zone(ctx, host); err == nil {
+			return nil
+		}
+		a.warn("The saved Cloudflare token doesn't work for %s.", host)
 	}
-	fmt.Fprintln(a.out, "Create a Cloudflare API token with Zone:Read and DNS:Edit for this domain.")
+	fmt.Fprintln(a.out, "ezVaultwarden needs a Cloudflare API token. On the page that opens, narrow it to")
+	fmt.Fprintln(a.out, "this domain, create it, and paste it here:")
+	fmt.Fprintf(a.out, "  %s\n", cloudflare.TokenURL)
+	a.openLink(cloudflare.TokenURL)
 	token, err := a.secret("Cloudflare API token: ")
 	if err != nil {
 		return err
@@ -110,7 +126,15 @@ func (a *app) saveDNSToken() error {
 	if token == "" {
 		return errors.New("no token, so nothing changed")
 	}
+	if _, err := a.dns(token).Zone(ctx, host); err != nil {
+		return err
+	}
 	return config.WritePrivate(a.paths.DNSToken(), []byte(token))
+}
+
+func (a *app) savedToken() (string, error) {
+	raw, err := os.ReadFile(a.paths.DNSToken())
+	return strings.TrimSpace(string(raw)), err
 }
 
 func (a *app) forgetDNSToken() error {
@@ -120,27 +144,62 @@ func (a *app) forgetDNSToken() error {
 	return nil
 }
 
-// pointDNS only advises: the record is the user's, and the name may resolve
-// differently inside their network.
-func (a *app) pointDNS(host string, port int) {
-	ip := outboundIP()
-	found, err := net.LookupHost(host)
-	if err == nil && ip != "" {
-		for _, addr := range found {
-			if addr == ip {
-				a.ok("%s points to this machine", host)
-				a.firewallNote(port)
-				return
-			}
+// dropDNS clears up after lan mode: our DNS record, then the token. Failing here
+// mustn't stop the user leaving the mode, so it only warns.
+func (a *app) dropDNS(ctx context.Context, s config.State) {
+	if token, err := a.savedToken(); err == nil && s.Mode == "lan" {
+		dns := a.dns(token)
+		zone, err := dns.Zone(ctx, s.Hostname)
+		if err == nil {
+			err = dns.Remove(ctx, zone, s.Hostname)
+		}
+		if err != nil {
+			a.warn("Couldn't remove the DNS record for %s: %v", s.Hostname, err)
 		}
 	}
-	a.warn("%s doesn't point to this machine yet. In Cloudflare, add a DNS-only record:", host)
-	fmt.Fprintf(a.out, "  A  %s  %s\n", host, ip)
-	a.firewallNote(port)
+	if err := a.forgetDNSToken(); err != nil {
+		a.warn("Couldn't delete the DNS token at %s: %v", a.paths.DNSToken(), err)
+	}
 }
 
-func (a *app) firewallNote(port int) {
-	fmt.Fprintf(a.out, "  If a firewall is on, allow port %d from your network.\n", port)
+func (a *app) syncDNS(ctx context.Context, s config.State, ip string) error {
+	token, err := a.savedToken()
+	if err != nil {
+		return err
+	}
+	dns := a.dns(token)
+	zone, err := dns.Zone(ctx, s.Hostname)
+	if err != nil {
+		return err
+	}
+	return dns.Point(ctx, zone, s.Hostname, ip)
+}
+
+// pointDNS sets the record. The vault already works locally by then, so a failure
+// only means the user sets it by hand.
+func (a *app) pointDNS(ctx context.Context, s config.State) {
+	ip := outboundIP()
+	if ip != "" {
+		err := a.syncDNS(ctx, s, ip)
+		if err == nil {
+			a.ok("%s points to this machine, %s", s.Hostname, ip)
+			return
+		}
+		a.warn("Couldn't set the DNS record: %v", err)
+	}
+	fmt.Fprintln(a.out, "  In Cloudflare, add a DNS-only record:")
+	fmt.Fprintf(a.out, "  A  %s  %s\n", s.Hostname, ip)
+}
+
+// openBrowser is a convenience: the link is printed too, for machines without one.
+func openBrowser(url string) {
+	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+		return
+	}
+	cmd := exec.Command("xdg-open", url)
+	if cmd.Start() == nil {
+		go func() { _ = cmd.Wait() }()
+	}
 }
 
 // outboundIP finds the address this machine uses on its network. Dialing UDP
@@ -211,8 +270,9 @@ func (a *app) fetchLego(ctx context.Context) (string, error) {
 	return binary, os.Rename(staged, final)
 }
 
-// renewCert runs daily. Caddy only reads the files at start, so it restarts
-// when they change.
+// renewCert runs hourly, so an address change is followed quickly. The certificate
+// itself is only checked daily. Caddy only reads the files at start, so it
+// restarts when they change.
 func (a *app) renewCert([]string) error {
 	s, err := a.load()
 	if err != nil {
@@ -221,11 +281,23 @@ func (a *app) renewCert([]string) error {
 	if s.Mode != "lan" {
 		return nil
 	}
+	if ip := outboundIP(); ip != "" {
+		if err := a.syncDNS(context.Background(), s, ip); err != nil {
+			a.warn("Couldn't update the DNS record: %v", err)
+		}
+	}
+	if !a.certCheckDue() {
+		return nil
+	}
 	before, err := os.ReadFile(a.paths.CertFile(s.Hostname))
 	if err != nil {
 		return err
 	}
 	if err := a.issue(context.Background(), s.Hostname); err != nil {
+		return err
+	}
+	stamp := a.now().Format(time.RFC3339)
+	if err := config.WritePrivate(a.paths.CertCheck(), []byte(stamp)); err != nil {
 		return err
 	}
 	after, err := os.ReadFile(a.paths.CertFile(s.Hostname))
@@ -236,6 +308,15 @@ func (a *app) renewCert([]string) error {
 		return nil
 	}
 	return a.rt.RestartProxy()
+}
+
+func (a *app) certCheckDue() bool {
+	raw, err := os.ReadFile(a.paths.CertCheck())
+	if err != nil {
+		return true
+	}
+	last, err := time.Parse(time.RFC3339, string(raw))
+	return err != nil || a.now().Sub(last) >= 23*time.Hour
 }
 
 // certProblem warns before an expired certificate locks every client out. A

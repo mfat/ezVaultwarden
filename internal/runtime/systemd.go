@@ -110,8 +110,8 @@ ExecStart="%s" renew-cert
 Description=ezVaultwarden certificate renewal
 
 [Timer]
-OnCalendar=04:00
-RandomizedDelaySec=1h
+OnCalendar=hourly
+RandomizedDelaySec=5m
 Persistent=true
 
 [Install]
