@@ -13,7 +13,7 @@ Read these before designing anything:
 
 ## Current state
 
-v0.3.2 is released. Its setup wizard offers this computer only, Tailscale, or the
+v0.3.3 is released. Its setup wizard offers this computer only, Tailscale, or the
 public internet with your own domain. The README warns against real passwords, and
 that stays until the Linux checks below are done.
 
