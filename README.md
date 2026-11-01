@@ -47,7 +47,8 @@ Then run `ezvaultwarden init`.
 | `update` with automatic rollback | Working, needs real-world use |
 | Temporary admin page | Working, needs real-world use |
 | Docker and Podman | Planned |
-| `lan` and `tailnet` modes | Planned |
+| `tailnet` mode | In progress |
+| `lan` mode | Planned |
 | `public` mode with Let's Encrypt | Planned |
 | Local web dashboard | Planned |
 

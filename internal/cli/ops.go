@@ -28,13 +28,22 @@ func (a *app) connect([]string) error {
 	fmt.Fprintf(a.out, "Server URL: %s\n\n", s.URL())
 	fmt.Fprintln(a.out, "Browser extension or desktop app")
 	fmt.Fprintln(a.out, "  Settings > Self-hosted > paste the URL above")
-	fmt.Fprintf(a.out, "  Your browser will warn you until you import %s into its certificate settings\n", a.paths.RootCert())
+	tailnet := s.Mode == "tailnet"
+	if !tailnet {
+		fmt.Fprintf(a.out, "  Your browser will warn you until you import %s into its certificate settings\n", a.paths.RootCert())
+	}
 	fmt.Fprintln(a.out, "\nbw CLI")
-	fmt.Fprintf(a.out, "  export NODE_EXTRA_CA_CERTS=%s\n", a.paths.RootCert())
+	if !tailnet {
+		fmt.Fprintf(a.out, "  export NODE_EXTRA_CA_CERTS=%s\n", a.paths.RootCert())
+	}
 	fmt.Fprintf(a.out, "  bw config server %s\n", s.URL())
 	fmt.Fprintf(a.out, "  bw login %s\n", email)
 	fmt.Fprintln(a.out, "\nPhone")
-	fmt.Fprintln(a.out, "  Not reachable in local mode. Remote access is coming.")
+	if tailnet {
+		fmt.Fprintln(a.out, "  Install Tailscale and Bitwarden, log in to Tailscale, then paste the URL above")
+	} else {
+		fmt.Fprintln(a.out, "  Not reachable in local mode. Try: ezvaultwarden expose tailnet")
+	}
 	return nil
 }
 
@@ -217,7 +226,8 @@ func (a *app) uninstall(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if _, err := a.load(); err != nil {
+	s, err := a.load()
+	if err != nil {
 		return err
 	}
 	if *deleteData {
@@ -229,6 +239,11 @@ func (a *app) uninstall(args []string) error {
 		}
 		if !strings.EqualFold(answer, deletePhrase) {
 			return errors.New("nothing changed")
+		}
+	}
+	if s.Mode == "tailnet" {
+		if err := a.ts.StopServing(context.Background()); err != nil {
+			a.warn("Couldn't stop Tailscale serving the vault: %v", err)
 		}
 	}
 	if err := a.rt.Remove(); err != nil {

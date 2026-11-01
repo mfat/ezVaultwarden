@@ -34,9 +34,9 @@ That run used v0.2.0, which still had the system certificate step.
    that nothing removes.
 4. **Fix what real use finds,** drop the README warning, release v0.3.0. That's also
    the first real test of self-update, from v0.2.0.
-5. **`tailnet` mode.** It should give real certificates with no domain or open ports,
-   and it's the priority over Let's Encrypt on a custom domain. Check Tailscale's
-   docs first: that its certificates work this way is from memory, not verified.
+5. **`tailnet` mode.** Built as `expose tailnet` from Tailscale's docs, and only tested
+   with a stand-in, so try it against real Tailscale.
+6. **Let's Encrypt over the DNS challenge.** With Cloudflare first, using `lego`.
 
 Decided but not built: see the roadmap. WSL detection with a Windows certificate
 step is a small addition worth making alongside item 2.

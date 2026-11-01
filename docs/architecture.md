@@ -19,8 +19,12 @@ Caddy handles TLS. What we own is setup, safety, backups and updates.
  data/                           The vault
 ```
 
-Both services bind to loopback. Caddy is the only way in, so future access modes
-change what Caddy listens on and nothing else.
+Both services bind to loopback. In `local` mode Caddy is the only way in.
+
+`expose tailnet` adds a second way in: `tailscaled` terminates TLS on port 443 of the
+machine's tailnet name and forwards to Vaultwarden directly. Caddy keeps running on
+`localhost`, because health checks use it in every mode. `DOMAIN` follows the mode,
+so the server restarts when the mode changes.
 
 ## Code layout
 
@@ -33,6 +37,7 @@ change what Caddy listens on and nothing else.
 | `internal/fetch` | Verified downloads and self-update |
 | `internal/backup` | Encrypted archives |
 | `internal/vault` | Reads the account list. Never touches vault contents |
+| `internal/tailscale` | Drives the `tailscale` command |
 
 `internal/runtime.Runtime` is the seam for Docker and Podman. Only `systemd.go`
 knows how services run, so backups, updates and safety checks stay shared.

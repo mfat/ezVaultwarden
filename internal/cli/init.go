@@ -223,7 +223,7 @@ func (a *app) probe(ctx context.Context, s config.State) error {
 		Timeout:   3 * time.Second,
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}},
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.URL()+"/alive", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.LocalURL()+"/alive", nil)
 	if err != nil {
 		return err
 	}

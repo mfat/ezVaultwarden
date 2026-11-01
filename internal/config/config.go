@@ -55,6 +55,7 @@ type State struct {
 	Version         string    `json:"version"`
 	Runtime         string    `json:"runtime"`
 	Mode            string    `json:"mode"`
+	Hostname        string    `json:"hostname,omitempty"`
 	Port            int       `json:"port"`
 	BackendPort     int       `json:"backend_port"`
 	SignupsClosed   bool      `json:"signups_closed"`
@@ -72,7 +73,15 @@ type Previous struct {
 }
 
 // URL is the address clients use.
-func (s State) URL() string { return fmt.Sprintf("https://localhost:%d", s.Port) }
+func (s State) URL() string {
+	if s.Mode == "tailnet" {
+		return "https://" + s.Hostname
+	}
+	return s.LocalURL()
+}
+
+// LocalURL is Caddy on this machine, which answers in every mode.
+func (s State) LocalURL() string { return fmt.Sprintf("https://localhost:%d", s.Port) }
 
 // ErrNotSetUp means init has not run.
 var ErrNotSetUp = errors.New("ezVaultwarden isn't set up yet. Run: ezvaultwarden init")

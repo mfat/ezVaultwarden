@@ -19,6 +19,7 @@ and a browser extension logging in.
 - Importing the certificate into Linux browsers
 - The desktop app logging in
 - Surviving a reboot
+- `expose tailnet` against real Tailscale. It's only tested with a stand-in
 - Self-update from a real GitHub release. The first test is v0.2.0 to the next one
 - The `arm64` build, which has been built but never run
 
@@ -36,8 +37,9 @@ and a browser extension logging in.
 ## Then
 
 5. **Better WSL support.** Detect it, and print the Windows certificate step.
-6. **`tailnet` mode.** Phones and other devices can reach the vault with no public
-   exposure and a real certificate. This is what makes it useful day to day.
+6. **`tailnet` mode.** Built as `expose tailnet`, and needs a real test. Phones and
+   other devices can reach the vault with no public exposure and a real certificate.
+   This is what makes it useful day to day.
 7. **Docker and Podman,** behind the existing `Runtime` interface. This also gives
    Mac and Windows users a path.
 8. **`lan` mode,** with a real certificate over the DNS challenge, so no ports open.

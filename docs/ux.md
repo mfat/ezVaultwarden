@@ -163,6 +163,9 @@ Cloudflare API token (DNS edit only): ****
 - **The browser's certificate warning.** We never touch the system's certificate
   store, so nothing needs `sudo`. The warning stays until the user imports the
   certificate into their browser.
+- **Tailscale setup.** `expose tailnet` needs MagicDNS and HTTPS turned on in the
+  Tailscale admin console, plus one `sudo tailscale set --operator=$USER`. It names
+  each step when it's missing. The machine's name ends up in public certificate logs.
 - **`curl | sh`.** Convenient, but some people won't like it, so manual download
   stays documented.
 - **WSL.** Windows browsers need the certificate imported by hand, and WSL can stop

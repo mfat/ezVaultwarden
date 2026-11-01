@@ -44,6 +44,16 @@ testing, but a proxy is the better long-running setup.
 
 `bw` refuses plain HTTP, even on localhost, so TLS isn't optional in `local` mode.
 
+## `tailscale serve`, not Caddy, for `tailnet` mode
+
+Caddy can fetch `*.ts.net` certificates from `tailscaled`, but as a non-root user it
+needs `TS_PERMIT_CERT_UID` in the root-owned `/etc/default/tailscaled`. `tailscale
+serve` needs one `sudo tailscale set --operator=$USER` instead, renews its own
+certificate and survives reboots with `--bg`. The cost is a second way in that
+bypasses Caddy. We ask the user to run the `sudo` step, and never run it ourselves.
+
+If Caddy has to see all traffic, say for rate limits, switch to Caddy's integration.
+
 ## Backups encrypted to a public key
 
 The first design used a word passphrase. That would have meant storing a secret on

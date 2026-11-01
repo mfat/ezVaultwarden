@@ -19,6 +19,7 @@ import (
 	"github.com/mfat/ezVaultwarden/internal/backup"
 	"github.com/mfat/ezVaultwarden/internal/config"
 	"github.com/mfat/ezVaultwarden/internal/runtime"
+	"github.com/mfat/ezVaultwarden/internal/tailscale"
 	"github.com/mfat/ezVaultwarden/internal/vault"
 )
 
@@ -30,6 +31,7 @@ const usage = `ezVaultwarden: run your own Vaultwarden.
   init        Set everything up
   status      Show what's running
   connect     Show how to connect apps and the bw CLI
+  expose      Choose who can reach it: tailnet or local
   start       Start the server
   stop        Stop the server
   backup      Make an encrypted backup now
@@ -51,7 +53,9 @@ type app struct {
 	rt    runtime.Runtime
 	now   func() time.Time
 
-	health func(context.Context, config.State) error
+	health    func(context.Context, config.State) error
+	reachable func(ctx context.Context, url string) error
+	ts        tailnet
 }
 
 // Run executes one command and returns the process exit code.
@@ -67,6 +71,9 @@ func Run(args []string) int {
 		paths: paths,
 		rt:    runtime.Systemd{Paths: paths},
 		now:   time.Now,
+
+		reachable: checkReachable,
+		ts:        tailscale.New(),
 	}
 	a.health = a.verify
 	if len(args) == 0 {
@@ -77,6 +84,7 @@ func Run(args []string) int {
 		"init":      a.init,
 		"status":    a.status,
 		"connect":   a.connect,
+		"expose":    a.expose,
 		"start":     a.start,
 		"stop":      a.stop,
 		"backup":    a.backup,
@@ -254,6 +262,11 @@ func (a *app) status(args []string) error {
 	fmt.Fprintf(a.out, "  Accounts  %d, %s\n", len(r.Accounts), signups)
 	if a.adminLeftOpen() {
 		a.warn("The admin page is open. Close it with: ezvaultwarden admin --close")
+	}
+	if s.Mode == "tailnet" {
+		if target, err := a.ts.Proxying(context.Background(), s.Hostname); err != nil || target == "" {
+			a.warn("Tailscale isn't serving the vault. Fix it with: ezvaultwarden expose tailnet")
+		}
 	}
 	for _, problem := range overrides {
 		a.warn("%s", problem)
