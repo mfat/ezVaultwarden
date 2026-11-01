@@ -221,7 +221,11 @@ func (Systemd) Logs(w io.Writer, n int) error {
 
 // Remove implements Runtime.
 func (s Systemd) Remove() error {
-	_ = systemctl("disable", "--now", certTimer, timerUnit, caddyUnit, vaultUnit)
+	// One at a time: a unit this install never had, such as the certificate timer on
+	// an install from before it existed, would otherwise stop all of them failing.
+	for _, unit := range []string{certTimer, timerUnit, caddyUnit, vaultUnit} {
+		_ = systemctl("disable", "--now", unit)
+	}
 	s.restoreLinger()
 	dir, err := unitDir()
 	if err != nil {
