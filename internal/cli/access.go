@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/user"
 	"strings"
 	"syscall"
 	"time"
@@ -385,11 +386,28 @@ func (a *app) showAccountStep(s config.State) {
 		fmt.Fprintln(a.out, "  If you have to stop, close them yourself: ezvaultwarden signups close")
 		fmt.Fprintln(a.out, "  Then finish later with: ezvaultwarden init")
 	default:
-		fmt.Fprintf(a.out, "\nOpen %s and create your account.\n", s.URL())
+		if os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "" {
+			fmt.Fprintf(a.out, "\nOpen %s and create your account.\n", s.URL())
+		} else {
+			fmt.Fprintln(a.out, "\nThis machine has no browser, so open a tunnel from your own computer first:")
+			fmt.Fprintf(a.out, "  ssh -L %d:localhost:%d %s\n", s.Port, s.Port, sshTarget())
+			fmt.Fprintf(a.out, "Then open %s there and create your account.\n", s.URL())
+		}
 		fmt.Fprintln(a.out, "Your browser will show a warning. Accept it to continue.")
-		fmt.Fprintln(a.out, "On a server with no browser, first run this on your own computer:")
-		fmt.Fprintf(a.out, "  ssh -L %d:localhost:%d you@your-server\n", s.Port, s.Port)
 	}
+}
+
+// sshTarget names this machine the way the user reached it, when they came over SSH.
+func sshTarget() string {
+	name := "you"
+	if u, err := user.Current(); err == nil {
+		name = u.Username
+	}
+	host := "this-server"
+	if fields := strings.Fields(os.Getenv("SSH_CONNECTION")); len(fields) == 4 {
+		host = fields[2]
+	}
+	return name + "@" + host
 }
 
 func (a *app) showPublicSteps() {

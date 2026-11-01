@@ -310,3 +310,27 @@ func TestStatusKeepsWarningUntilTwoStepLoginIsOn(t *testing.T) {
 		}
 	}
 }
+
+func TestTunnelHelpOnlyShowsWithoutADesktop(t *testing.T) {
+	s := config.State{Mode: "local", Port: 8443}
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("DISPLAY", ":0")
+	h, _, _ := planSetup(t, "")
+	h.showAccountStep(s)
+	if strings.Contains(h.output.String(), "ssh -L") {
+		t.Fatalf("a desktop doesn't need a tunnel: %s", h.output)
+	}
+
+	t.Setenv("DISPLAY", "")
+	t.Setenv("SSH_CONNECTION", "198.51.100.9 50000 203.0.113.7 22")
+	h.output.Reset()
+	h.showAccountStep(s)
+	if !strings.Contains(h.output.String(), "@203.0.113.7") {
+		t.Fatalf("no real address: %s", h.output)
+	}
+
+	t.Setenv("SSH_CONNECTION", "")
+	if !strings.HasSuffix(sshTarget(), "@this-server") {
+		t.Fatalf("target %s", sshTarget())
+	}
+}
