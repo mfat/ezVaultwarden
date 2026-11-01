@@ -334,3 +334,26 @@ func TestTunnelHelpOnlyShowsWithoutADesktop(t *testing.T) {
 		t.Fatalf("target %s", sshTarget())
 	}
 }
+
+func TestStatusNoticesAProxyTurnedOnLater(t *testing.T) {
+	h, _, _ := planSetup(t, "")
+	s, _ := h.load()
+	s.Mode, s.Hostname = "public", myDomain
+	if err := config.Save(h.paths, s); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.status(nil); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(h.output.String(), "orange cloud") {
+		t.Fatalf("warned about a healthy name: %s", h.output)
+	}
+	h.resolve = func(context.Context, string) ([]string, error) { return []string{"104.21.72.85"}, nil }
+	h.output.Reset()
+	if err := h.status(nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(h.output.String(), "orange cloud") {
+		t.Fatalf("no warning: %s", h.output)
+	}
+}

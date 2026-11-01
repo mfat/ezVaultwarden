@@ -347,6 +347,11 @@ func (a *app) status(args []string) error {
 	if s.UsesLego() && !a.nameWorks(s.Hostname) {
 		a.warnName(s.Hostname)
 	}
+	if s.Mode == "public" {
+		if problem := a.dnsProblem(context.Background(), s.Hostname); problem != "" {
+			a.warn("%s", problem)
+		}
+	}
 	if on, err := vault.HasTwoStepLogin(a.paths.Data()); s.Mode == "public" && err == nil && !on {
 		a.warn("Two-step login is off, and anyone can see your login page. Turn it on in your vault's Security settings.")
 	}
