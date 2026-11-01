@@ -17,17 +17,18 @@ v0.2.0 is released. It's reachable from the same machine only, or over an SSH tu
 (untested). The README warns against real passwords, and that stays until the
 Linux checks below are done.
 
-It was developed on Windows, with everything tested in WSL. It has **never run on a
-real Linux machine**, so treat that as the first thing to find out.
+It was developed on Windows and tested in WSL. A first run on a real Linux machine
+worked: install, a browser signup closing signups, the "Saved it?" prompt, the web
+vault in Firefox after accepting the warning, and a browser extension logging in.
+That run used v0.2.0, which still had the system certificate step.
 
 ## Next steps, in order
 
-1. **Check it on real Linux with the maintainer.** Use throwaway data:
-   - importing the certificate by hand, and whether browsers then trust the page
-   - a real browser signup, with `init` noticing it and closing signups
-   - the recovery kit and "Saved it?" prompts, which only `--yes` has exercised
+1. **Finish the real Linux checks.** The maintainer skipped these for now, so they're
+   still unproven. Use throwaway data:
    - a reboot: does the vault come back by itself?
-   - a browser extension or desktop app logging in
+   - the desktop app logging in
+   - importing the certificate by hand, and whether browsers then trust the page
 2. **`init --from-backup`.** Restoring on a new machine is untested and undocumented.
 3. **Clean up** `data.before-restore-*` and `data.replaced-*`, which are plain copies
    that nothing removes.

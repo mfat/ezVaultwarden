@@ -10,17 +10,22 @@ first items below are done.
 attachments, a real upgrade, rollback, a broken update, a tampered release, the admin
 page, and clean removal. See [test/e2e](../test/e2e/README.md).
 
+**Proven on a real Linux machine, with v0.2.0:** install, a browser signup closing
+signups, the "Saved it?" prompt, the web vault in Firefox after accepting the warning,
+and a browser extension logging in.
+
 **Not proven yet:**
 
-- Importing the certificate into Linux browsers, and whether clients then accept it
-- A real browser signup, and the interactive prompts
-- A real Linux machine, and surviving a reboot
+- Importing the certificate into Linux browsers
+- The desktop app logging in
+- Surviving a reboot
 - Self-update from a real GitHub release. The first test is v0.2.0 to the next one
 - The `arm64` build, which has been built but never run
 
 ## Next
 
-1. **Test on a real Linux machine.** This needs a person, and may reorder what follows.
+1. **Finish testing on a real Linux machine.** Reboot, desktop app and certificate
+   import are skipped for now. This needs a person, and may reorder what follows.
 2. **`init --from-backup`.** Restoring on a new machine works around `init` today:
    untested, undocumented, and signups stay open until the last step. Disaster
    recovery is why backups exist.
