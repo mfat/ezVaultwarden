@@ -18,6 +18,7 @@ type fakeTailnet struct {
 	serveErr  error
 	served    string
 	stopped   int
+	stopErr   error
 }
 
 func (f *fakeTailnet) Lookup(context.Context) (string, error) { return box, f.lookupErr }
@@ -31,7 +32,10 @@ func (f *fakeTailnet) Serve(_ context.Context, target string) error {
 	f.served = target
 	return nil
 }
-func (f *fakeTailnet) StopServing(context.Context) error { f.stopped++; return nil }
+func (f *fakeTailnet) StopServing(context.Context) error {
+	f.stopped++
+	return f.stopErr
+}
 
 func exposeSetup(t *testing.T) (*harness, *fakeTailnet) {
 	t.Helper()

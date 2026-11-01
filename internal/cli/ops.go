@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/mfat/ezVaultwarden/internal/backup"
 	"github.com/mfat/ezVaultwarden/internal/config"
@@ -88,9 +89,29 @@ func (a *app) backup(args []string) error {
 	return nil
 }
 
-// makeBackup pauses the server so the database is at rest. The server comes
-// back whatever happens to the backup.
-func (a *app) makeBackup(s config.State) (file string, err error) {
+func (a *app) makeBackup(s config.State) (string, error) {
+	file, err := a.archive(s)
+	if err != nil {
+		return file, err
+	}
+	// Outside the pause, because a slow disk shouldn't keep the vault down.
+	for _, dir := range s.BackupTargets {
+		if a.sameDisk(dir) {
+			a.warn("%s is on the same disk as your vault, so it won't survive that disk failing. Is it unplugged?", dir)
+		}
+		if err := copyFile(file, filepath.Join(dir, filepath.Base(file))); err != nil {
+			return file, fmt.Errorf("copying to %s: %w", dir, err)
+		}
+		if err := backup.Prune(dir, keepBackups); err != nil {
+			return file, err
+		}
+	}
+	return file, nil
+}
+
+// archive pauses the server so the database is at rest. The server comes back
+// whatever happens to the backup.
+func (a *app) archive(s config.State) (file string, err error) {
 	wasRunning := a.rt.Running()
 	if err := a.rt.StopVault(); err != nil {
 		return "", err
@@ -106,18 +127,17 @@ func (a *app) makeBackup(s config.State) (file string, err error) {
 	if err != nil {
 		return "", err
 	}
-	if err := backup.Prune(a.paths.Backups(), keepBackups); err != nil {
-		return file, err
+	return file, backup.Prune(a.paths.Backups(), keepBackups)
+}
+
+// sameDisk spots a backup folder that's really this machine, such as a mount
+// point with nothing plugged in.
+func (a *app) sameDisk(dir string) bool {
+	var target, data syscall.Stat_t
+	if syscall.Stat(dir, &target) != nil || syscall.Stat(a.paths.Data(), &data) != nil {
+		return false
 	}
-	for _, dir := range s.BackupTargets {
-		if err := copyFile(file, filepath.Join(dir, filepath.Base(file))); err != nil {
-			return file, fmt.Errorf("copying to %s: %w", dir, err)
-		}
-		if err := backup.Prune(dir, keepBackups); err != nil {
-			return file, err
-		}
-	}
-	return file, nil
+	return target.Dev == data.Dev
 }
 
 func copyFile(src, dst string) error {
@@ -176,16 +196,23 @@ func (a *app) restore(args []string) error {
 			return errors.New("nothing changed")
 		}
 	}
+	wasRunning := a.rt.Running()
 	if err := a.rt.StopVault(); err != nil {
 		return err
 	}
 	keep, restoreErr := backup.Restore(*file, key, a.paths.Data(), a.now())
 	// Back up either way: a refused restore must not leave the vault down.
-	if err := a.rt.StartVault(); err != nil {
-		return err
+	if wasRunning {
+		if err := a.rt.StartVault(); err != nil {
+			return err
+		}
 	}
 	if restoreErr != nil {
 		return restoreErr
+	}
+	if !wasRunning {
+		a.ok("Restored. The server was stopped, so it's still stopped. The previous vault is in %s", keep)
+		return nil
 	}
 	if err := a.health(context.Background(), s); err != nil {
 		return err

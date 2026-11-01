@@ -97,8 +97,8 @@ func TestExtractTakesOnlyTheServerAndWebVault(t *testing.T) {
 
 func TestNewestLayerWins(t *testing.T) {
 	img, _ := fakeRegistry(t,
-		layer(t, map[string]string{"vaultwarden": "old", "web-vault/a": "old"}),
-		layer(t, map[string]string{"vaultwarden": "new", "web-vault/a": "new"}),
+		layer(t, map[string]string{"vaultwarden": "old", "web-vault/a": "old", "web-vault/index.html": "old"}),
+		layer(t, map[string]string{"vaultwarden": "new", "web-vault/a": "new", "web-vault/index.html": "new"}),
 	)
 	dest := t.TempDir()
 	if err := ExtractVaultwarden(context.Background(), img, "amd64", dest, nil); err != nil {
@@ -106,6 +106,48 @@ func TestNewestLayerWins(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(filepath.Join(dest, "vaultwarden")); string(got) != "new" {
 		t.Fatalf("binary = %q", got)
+	}
+}
+
+func TestEveryLayerCounts(t *testing.T) {
+	img, _ := fakeRegistry(t,
+		layer(t, map[string]string{"web-vault/index.html": "page", "web-vault/app.js": "app"}),
+		layer(t, map[string]string{"vaultwarden": "bin", "web-vault/new.css": "new"}),
+	)
+	dest := t.TempDir()
+	if err := ExtractVaultwarden(context.Background(), img, "amd64", dest, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"web-vault/index.html", "web-vault/app.js", "web-vault/new.css"} {
+		if _, err := os.Stat(filepath.Join(dest, f)); err != nil {
+			t.Fatalf("%s left out: %v", f, err)
+		}
+	}
+}
+
+func TestWhiteoutsStayDeleted(t *testing.T) {
+	img, _ := fakeRegistry(t,
+		layer(t, map[string]string{"vaultwarden": "bin", "web-vault/index.html": "page", "web-vault/gone.js": "old", "web-vault/dir/a": "old"}),
+		layer(t, map[string]string{"web-vault/.wh.gone.js": "", "web-vault/dir/.wh..wh..opq": "", "web-vault/dir/b": "new"}),
+	)
+	dest := t.TempDir()
+	if err := ExtractVaultwarden(context.Background(), img, "amd64", dest, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"web-vault/gone.js", "web-vault/dir/a"} {
+		if _, err := os.Stat(filepath.Join(dest, f)); err == nil {
+			t.Fatalf("%s came back", f)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dest, "web-vault/dir/b")); err != nil {
+		t.Fatal("the newer file was lost")
+	}
+}
+
+func TestAWebVaultWithNoEntryPageIsRefused(t *testing.T) {
+	img, _ := fakeRegistry(t, layer(t, map[string]string{"vaultwarden": "bin", "web-vault/app.js": "app"}))
+	if err := ExtractVaultwarden(context.Background(), img, "amd64", t.TempDir(), nil); err == nil {
+		t.Fatal("expected an error")
 	}
 }
 

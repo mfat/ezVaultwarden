@@ -55,7 +55,7 @@ Waiting for your account...
 ```
 
 Signups closing by itself is the heart of it: no setting to remember. On public access
-there is a short window before the first account, so the wizard says so plainly.
+the first account needs a private link, so strangers can't get there first.
 
 Then the recovery kit, shown once:
 
@@ -195,8 +195,8 @@ Continue? [y/N] y
   Tailscale admin console, plus one `sudo tailscale set --operator=$USER`. It names
   each step when it's missing. The machine's name ends up in public certificate logs.
 - **Port 443 without root.** It needs one `sudo` step, which we print and never run.
-- **The moment before the first account on `public`.** Signups are open, so the wizard
-  says plainly to create the account now, and how to close signups by hand.
+- **The private link on `public`.** Only the link printed by the wizard can create the
+  first account, so it has to reach the user's own browser.
 - **`curl | sh`.** Convenient, but some people won't like it, so manual download
   stays documented.
 - **WSL.** Windows browsers need the certificate imported by hand, and WSL can stop

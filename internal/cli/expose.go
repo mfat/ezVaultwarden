@@ -133,8 +133,12 @@ func (a *app) exposeLocal(ctx context.Context, s config.State, args []string) er
 		return err
 	}
 	before := s
+	if err := a.closeTailnet(ctx, before); err != nil {
+		return err
+	}
 	s.Mode, s.Hostname = "local", ""
 	if err := a.applyMode(ctx, s); err != nil {
+		a.restoreTailnet(ctx, before)
 		return err
 	}
 	a.leaveMode(ctx, before)
@@ -144,13 +148,17 @@ func (a *app) exposeLocal(ctx context.Context, s config.State, args []string) er
 }
 
 // applyMode restarts both services: DOMAIN must match the address clients use,
-// and the mode decides what Caddy listens on.
+// and the mode decides what Caddy listens on. A server stopped on purpose stays
+// stopped, and picks the settings up when it next starts.
 func (a *app) applyMode(ctx context.Context, s config.State) error {
 	if err := config.Write(a.paths, s); err != nil {
 		return err
 	}
 	if err := config.Save(a.paths, s); err != nil {
 		return err
+	}
+	if !a.rt.Running() {
+		return nil
 	}
 	if err := a.rt.RestartVault(); err != nil {
 		return err

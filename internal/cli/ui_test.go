@@ -175,3 +175,13 @@ func TestSetupStepOneMatchesTheChoices(t *testing.T) {
 		}
 	}
 }
+
+func TestCtrlCCantInterruptARunningCommand(t *testing.T) {
+	r := uiSetup(t)
+	m := r.m.(uiModel)
+	m.screen, m.task = uiTask, uiTaskState{title: "Updating"}
+	next, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if cmd != nil || !strings.Contains(next.(uiModel).note, "Still working") {
+		t.Fatalf("cmd %v, note %q", cmd != nil, next.(uiModel).note)
+	}
+}

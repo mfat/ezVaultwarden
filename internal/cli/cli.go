@@ -12,7 +12,10 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/signal"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/term"
@@ -135,7 +138,10 @@ func Run(args []string) int {
 		fmt.Fprintf(os.Stderr, "✗ Unknown command %q\n\n%s", args[0], usage)
 		return 2
 	}
-	if err := cmd(args[1:]); err != nil {
+	// A closed terminal or quit app mustn't kill a command halfway through. Printing
+	// then simply goes nowhere.
+	signal.Ignore(syscall.SIGPIPE)
+	if err := a.locked(args, cmd); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
@@ -143,6 +149,54 @@ func Run(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// mutating lists the commands that change services, data or settings. They run one
+// at a time, so the nightly backup can't land in the middle of an update. init isn't
+// here, because it waits for the first account, and signups close must work meanwhile.
+var mutating = map[string]bool{
+	"start": true, "stop": true, "backup": true, "restore": true, "update": true, "rollback": true,
+	"expose": true, "signups": true, "uninstall": true,
+}
+
+func (a *app) locked(args []string, cmd func([]string) error) error {
+	if !mutating[args[0]] {
+		return cmd(args[1:])
+	}
+	if _, err := os.Stat(a.paths.Root); err != nil {
+		return cmd(args[1:])
+	}
+	wait := time.Duration(0)
+	if len(args) > 1 && args[0] == "backup" && args[1] == "--auto" {
+		wait = 30 * time.Minute // a timer has nobody to tell, so it takes its turn
+	}
+	unlock, err := lock(filepath.Join(a.paths.Root, ".lock"), wait)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return cmd(args[1:])
+}
+
+// lock takes an advisory lock, which the kernel drops if the process dies, so a
+// crash can never leave it stuck.
+func lock(path string, wait time.Duration) (func(), error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	deadline := time.Now().Add(wait)
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return func() { f.Close() }, nil
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) || time.Now().After(deadline) {
+			f.Close()
+			return nil, errors.New("another ezVaultwarden operation is running. Try again when it's finished")
+		}
+		time.Sleep(time.Second)
+	}
 }
 
 func (a *app) ok(format string, args ...any) {
@@ -270,7 +324,8 @@ type statusReport struct {
 	Mode          string   `json:"mode"`
 	Version       string   `json:"version"`
 	Accounts      []string `json:"accounts"`
-	SignupsClosed bool     `json:"signups_closed"`
+	SignupsClosed bool     `json:"signups_closed"` // what the server really does
+	Warnings      []string `json:"warnings,omitempty"`
 	Backups       int      `json:"backups"`
 	LastBackup    string   `json:"last_backup,omitempty"`
 	BackupTargets []string `json:"backup_targets,omitempty"`
@@ -279,7 +334,8 @@ type statusReport struct {
 func (a *app) report(s config.State) statusReport {
 	r := statusReport{
 		Running: a.rt.Running(), URL: s.URL(), Mode: s.Mode, Version: s.Version,
-		SignupsClosed: s.SignupsClosed, BackupTargets: s.BackupTargets,
+		SignupsClosed: s.SignupsClosed && !a.signupsReopened(), BackupTargets: s.BackupTargets,
+		Warnings: a.overrides(s),
 	}
 	r.Accounts, _ = vault.Accounts(a.paths.Data())
 	if files, err := backup.List(a.paths.Backups()); err == nil && len(files) > 0 {
@@ -336,7 +392,7 @@ func (a *app) status(args []string) error {
 	}
 	overrides := a.overrides(s)
 	signups := "signups closed"
-	if !r.SignupsClosed {
+	if !s.SignupsClosed {
 		signups = "⚠ signups OPEN, finish with: ezvaultwarden init"
 	} else if a.signupsReopened() {
 		signups = "⚠ signups OPEN"
@@ -349,6 +405,8 @@ func (a *app) status(args []string) error {
 		if target, err := a.ts.Proxying(context.Background(), s.Hostname); err != nil || target == "" {
 			a.warn("Tailscale isn't serving the vault. Fix it with: ezvaultwarden expose tailnet")
 		}
+	} else if a.tailnetLeak(context.Background(), s) {
+		a.warn("Tailscale can still reach your vault. Close it with: tailscale serve --https=443 off")
 	}
 	if problem := a.certProblem(s); problem != "" {
 		a.warn("%s", problem)

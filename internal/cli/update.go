@@ -119,31 +119,42 @@ func (a *app) applyUpdate(ctx context.Context, s config.State) error {
 	if err := a.rt.Stop(); err != nil {
 		return err
 	}
+	// The old snapshot goes only once the new one is whole, so a failure here
+	// can't lose the rollback we already have.
 	snapshot := a.paths.Snapshot()
-	if err := os.RemoveAll(snapshot); err != nil {
-		return err
-	}
-	if err := copyTree(a.paths.Data(), snapshot); err != nil {
-		return fmt.Errorf("couldn't copy your data, so nothing was updated: %w", errors.Join(err, a.startIf(wasRunning)))
+	staged := snapshot + ".new"
+	_ = os.RemoveAll(staged)
+	if err := copyTree(a.paths.Data(), staged); err != nil {
+		return fmt.Errorf("couldn't copy your data, so nothing was updated: %w", errors.Join(err, os.RemoveAll(staged), a.startIf(wasRunning)))
 	}
 	if _, err := backup.Create(a.paths.Data(), a.paths.Backups(), s.BackupRecipient, a.now()); err != nil {
 		return fmt.Errorf("couldn't back up, so nothing was updated: %w", errors.Join(err, a.startIf(wasRunning)))
 	}
 	a.ok("Backup taken")
 
+	if err := os.RemoveAll(snapshot); err != nil {
+		return fmt.Errorf("couldn't replace the old copy of your data, so nothing was updated: %w", errors.Join(err, a.startIf(wasRunning)))
+	}
+	if err := os.Rename(staged, snapshot); err != nil {
+		return fmt.Errorf("couldn't keep a copy of your data, so nothing was updated: %w", errors.Join(err, a.startIf(wasRunning)))
+	}
+
 	// Saved before the switch, so an interrupted update can still be undone.
+	before := s
 	s.Previous = &config.Previous{ID: previous, Version: s.Version}
 	if err := config.Save(a.paths, s); err != nil {
 		return errors.Join(err, a.startIf(wasRunning))
 	}
 	if err := a.setCurrent(dir); err != nil {
-		return errors.Join(err, a.startIf(wasRunning))
+		return errors.Join(err, config.Save(a.paths, before), a.startIf(wasRunning))
 	}
 	s.Version = fetch.VaultwardenVersion
 	if err := config.Save(a.paths, s); err != nil {
-		return err
+		undo := a.setCurrent(filepath.Join(a.paths.Versions(), previous))
+		return fmt.Errorf("couldn't save the update, so it was undone: %w", errors.Join(err, undo, a.startIf(wasRunning)))
 	}
 
+	// It has to run to prove itself, even if it was stopped on purpose.
 	err = a.rt.Start()
 	if err == nil {
 		err = a.health(ctx, s)
@@ -157,6 +168,12 @@ func (a *app) applyUpdate(ctx context.Context, s config.State) error {
 		return fmt.Errorf("the update failed, and your vault is running as it was. Details: ezvaultwarden logs (%v)", err)
 	}
 	a.ok("Updated and healthy: Vaultwarden %s", s.Version)
+	if !wasRunning {
+		if err := a.rt.Stop(); err != nil {
+			return err
+		}
+		fmt.Fprintln(a.out, "  It was stopped before the update, so it's stopped again.")
+	}
 	return a.pruneVersions(previous)
 }
 

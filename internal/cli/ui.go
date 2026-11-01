@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -273,6 +274,8 @@ func spawnSelf(stdin string, args ...string) <-chan uiEvent {
 		}
 		cmd := exec.Command(self, args...)
 		cmd.Stdin = strings.NewReader(stdin)
+		// Its own session, so closing the terminal can't stop an update halfway.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		out, err := cmd.StdoutPipe()
 		if err != nil {
 			events <- uiEvent{done: true, err: err}
@@ -393,6 +396,10 @@ func (m uiModel) homeItems() []string {
 func (m uiModel) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	if key == "ctrl+c" {
+		if m.screen == uiTask && !m.task.finished {
+			m.note = "Still working. Stopping now could leave your vault down."
+			return m, nil
+		}
 		return m, tea.Quit
 	}
 	switch m.screen {

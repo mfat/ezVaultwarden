@@ -80,18 +80,20 @@ func ExtractVaultwarden(ctx context.Context, img Image, arch, dest string, repor
 		return fmt.Errorf("image manifest: %w", err)
 	}
 
-	// Newest layer first, so an earlier layer can never replace a later file.
-	found := extraction{dest: dest, seen: map[string]bool{}}
+	// Newest layer first, so an earlier layer can never replace a later file. Every
+	// layer counts: the web vault can be spread across several.
+	found := extraction{dest: dest, seen: map[string]bool{}, hidden: map[string]bool{}}
 	var done int64
 	for i := len(man.Layers) - 1; i >= 0; i-- {
 		if err := c.extractLayer(ctx, man.Layers[i].Digest, &found, offsetReport(report, &done)); err != nil {
 			return fmt.Errorf("image layer: %w", err)
 		}
-		if found.binary && found.webVault {
-			return nil
-		}
+		found.closeLayer()
 	}
-	return errors.New("image holds no Vaultwarden binary or web vault")
+	if !found.binary || !found.seen["web-vault/index.html"] {
+		return errors.New("image holds no Vaultwarden binary or web vault")
+	}
+	return nil
 }
 
 type registry struct {
@@ -186,8 +188,27 @@ func (c *registry) downloadBlob(ctx context.Context, digest string, report Repor
 type extraction struct {
 	dest     string
 	seen     map[string]bool
+	hidden   map[string]bool // paths deleted by a newer layer
+	pending  []string        // this layer's whiteouts
 	binary   bool
 	webVault bool
+}
+
+func (x *extraction) isHidden(name string) bool {
+	for p := name; p != "." && p != "/"; p = path.Dir(p) {
+		if x.hidden[p] {
+			return true
+		}
+	}
+	return false
+}
+
+// closeLayer applies this layer's whiteouts. They only reach layers beneath it.
+func (x *extraction) closeLayer() {
+	for _, p := range x.pending {
+		x.hidden[p] = true
+	}
+	x.pending = nil
 }
 
 // offsetReport turns one layer's count into a total, and keeps the running sum
@@ -229,11 +250,20 @@ func (x *extraction) read(r io.Reader) error {
 			return err
 		}
 		name := path.Clean(strings.TrimPrefix(hdr.Name, "./"))
-		wanted := name == "vaultwarden" || strings.HasPrefix(name, "web-vault/")
-		if !wanted || hdr.Typeflag != tar.TypeReg || x.seen[name] {
+		// A whiteout deletes a path from the layers beneath this one.
+		if base := path.Base(name); strings.HasPrefix(base, ".wh.") {
+			if base == ".wh..wh..opq" {
+				x.pending = append(x.pending, path.Dir(name))
+			} else {
+				x.pending = append(x.pending, path.Join(path.Dir(name), strings.TrimPrefix(base, ".wh.")))
+			}
 			continue
 		}
-		if strings.Contains("/"+name+"/", "/../") || strings.HasPrefix(path.Base(name), ".wh.") {
+		wanted := name == "vaultwarden" || strings.HasPrefix(name, "web-vault/")
+		if !wanted || hdr.Typeflag != tar.TypeReg || x.seen[name] || x.isHidden(name) {
+			continue
+		}
+		if strings.Contains("/"+name+"/", "/../") {
 			continue
 		}
 		x.seen[name] = true

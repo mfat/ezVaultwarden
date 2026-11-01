@@ -93,17 +93,16 @@ func (a *app) exposeLAN(ctx context.Context, s config.State, args []string) erro
 		return err
 	}
 	before := s
+	if err := a.closeTailnet(ctx, before); err != nil {
+		return err
+	}
 	s.Mode, s.Hostname = "lan", host
 	if err := a.applyMode(ctx, s); err != nil {
 		if undoErr := a.applyMode(ctx, before); undoErr != nil {
 			a.warn("Couldn't go back to the previous address: %v", undoErr)
 		}
+		a.restoreTailnet(ctx, before)
 		return err
-	}
-	if before.Mode == "tailnet" {
-		if err := a.ts.StopServing(ctx); err != nil {
-			a.warn("Couldn't stop Tailscale serving the vault: %v", err)
-		}
 	}
 	a.ok("Available on your network at %s", s.URL())
 	a.warn("Apps set to the old address need the new one. See: ezvaultwarden connect")

@@ -105,13 +105,35 @@ token, no `lego`, any DNS provider and a normal address. The cost is one `sudo` 
 not running as root, which we print and never run. Port 80 stays closed, as the TLS check
 works over 443, so plain `http://` links fail instead of redirecting.
 
-## Public signups stay open until the first account
+## A private link creates the first public account
 
-A public site can't use an SSH tunnel for ordinary users, and a temporary password would
-be more to explain. So the wizard says plainly to create the account now, closes signups
-automatically when it appears, and teaches `signups close` for stopping partway. The price
-is a short window where someone else could register. Two-step login can't be required
-before the account exists, so `status` warns until it's on.
+A public vault needs its first account before signups can close, and a warning doesn't
+stop a stranger getting there first. An SSH tunnel is too much for ordinary users, and a
+password prompt clashes with the web vault's own login. So Caddy refuses the signup
+endpoints unless the browser came through a one-time link, which sets a cookie. Everything
+else stays reachable, and an interrupted setup stays closed. Two-step login can't be
+required before the account exists, so `status` warns until it's on.
+
+## Tailscale closes first, or not at all
+
+Tailscale forwards straight to the server, past Caddy, so changing our own config doesn't
+close it. Leaving `tailnet` stops it, confirms it stopped, and only then changes anything.
+If that fails, the mode doesn't change and the command says so.
+
+## One operation at a time
+
+Update, backup, restore and access changes all stop services and touch the same data, so
+they share an advisory lock, which the kernel drops if a process dies. The nightly backup
+waits its turn. `init` doesn't take it, because it waits for the first account. `admin`
+doesn't either, because it stays open while someone works.
+
+## Native services can read the user's files
+
+They run as the user, with only `NoNewPrivileges` and a tight umask, so an exploited server
+could read whatever that account can, and everything on the machine when run as root. A
+dedicated user needs root, which is what native mode avoids, and systemd sandboxing inside
+user services is uneven across distributions. So it's accepted for now and worth testing.
+A container runtime would answer it better.
 
 ## Backups encrypted to a public key
 

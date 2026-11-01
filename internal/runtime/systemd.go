@@ -173,7 +173,9 @@ func (s Systemd) keepRunningAfterLogout() {
 	}
 	if exec.Command("loginctl", "enable-linger", u.Username).Run() == nil {
 		_ = os.WriteFile(s.lingerMarker(), nil, 0o600)
+		return
 	}
+	fmt.Fprintf(os.Stderr, "⚠ Your vault will stop when you log out, and won't start after a reboot. To fix that, run:\n  sudo loginctl enable-linger %s\n", u.Username)
 }
 
 func (s Systemd) restoreLinger() {

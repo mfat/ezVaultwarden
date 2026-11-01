@@ -26,7 +26,9 @@ machine's tailnet name and forwards to Vaultwarden directly. Caddy keeps running
 `localhost`, because health checks use it in every mode. `DOMAIN` follows the mode,
 so the server restarts when the mode changes.
 
-`public` mode adds a Caddy site for the user's domain on port 443. Caddy gets and renews
+`public` mode adds a Caddy site for the user's domain on port 443, which only accepts
+signups from a browser that came through the wizard's one-time link until the first
+account exists. Caddy gets and renews
 the certificate itself over port 443 alone, so port 80 stays closed, and any DNS provider
 works. That site never serves `/admin`.
 
@@ -107,7 +109,8 @@ so a problem costs nothing:
 After that it downloads, writes config for the final address, installs the services and
 confirms the address works. It waits for the first account by reading the database,
 closes signups, restarts, and shows the recovery kit. If interrupted, rerunning it
-resumes. `--access` and `--domain` skip the question, and `--yes` alone stays local.
+resumes. `--access` and `--domain` skip the question, and `--yes` alone stays local. With
+`--yes`, the backup key stays on the server, out of the output, until the user moves it.
 
 Public mode's DNS check uses DNS over HTTPS, because many networks intercept ordinary
 DNS, and finding the public address asks an outside service. Both happen for that choice

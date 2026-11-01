@@ -69,6 +69,7 @@ type State struct {
 	Port            int       `json:"port"`
 	BackendPort     int       `json:"backend_port"`
 	SignupsClosed   bool      `json:"signups_closed"`
+	SetupToken      string    `json:"setup_token,omitempty"`
 	BackupRecipient string    `json:"backup_recipient"`
 	BackupTargets   []string  `json:"backup_targets,omitempty"`
 
@@ -188,9 +189,9 @@ https://%s {
 	}
 	@admin path /admin /admin/*
 	respond @admin 404
-	reverse_proxy 127.0.0.1:%d
+%s	reverse_proxy 127.0.0.1:%d
 }
-`, s.Hostname, s.BackendPort)
+`, s.Hostname, setupGate(s), s.BackendPort)
 	}
 	return fmt.Sprintf(`{
 	admin off
@@ -207,6 +208,24 @@ https://localhost:%d {
 	reverse_proxy 127.0.0.1:%d
 }
 %s`, p.CaddyData(), s.Port, bind, s.BackendPort, lan)
+}
+
+// setupGate keeps a public vault closed to strangers before its first account.
+// Only a browser that came through the one-time link gets the cookie that lets it
+// register, so an interrupted setup stays closed instead of open.
+func setupGate(s State) string {
+	if s.SetupToken == "" || s.SignupsClosed {
+		return ""
+	}
+	return fmt.Sprintf(`	@setuplink query setup=%[1]s
+	header @setuplink Set-Cookie "ezsetup=%[1]s; Path=/; Secure; HttpOnly; SameSite=Strict"
+	redir @setuplink / 302
+	@signup {
+		path /identity/accounts/register /identity/accounts/register/* /api/accounts/register /api/accounts/register/*
+		not header Cookie *ezsetup=%[1]s*
+	}
+	respond @signup 403
+`, s.SetupToken)
 }
 
 // Write renders every generated file from the state.

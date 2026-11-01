@@ -161,3 +161,42 @@ func TestRollbackNeedsSomethingToGoBackTo(t *testing.T) {
 		t.Fatal("expected a refusal")
 	}
 }
+
+func TestAStoppedServerIsStoppedAgainAfterUpdating(t *testing.T) {
+	h := updatable(t)
+	h.rt.running = false
+	s, _ := h.load()
+	if err := h.applyUpdate(context.Background(), s); err != nil {
+		t.Fatal(err)
+	}
+	if h.rt.running {
+		t.Fatal("left a stopped server running")
+	}
+}
+
+func TestAFailedCopyKeepsTheEarlierRollback(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads everything")
+	}
+	h := updatable(t)
+	snapshot := h.paths.Snapshot()
+	if err := os.MkdirAll(snapshot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, "keep"), []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h.paths.Data(), "unreadable"), nil, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := h.load()
+	if err := h.applyUpdate(context.Background(), s); err == nil {
+		t.Fatal("expected an error")
+	}
+	if _, err := os.Stat(filepath.Join(snapshot, "keep")); err != nil {
+		t.Fatalf("lost the earlier rollback: %v", err)
+	}
+	if !h.rt.running {
+		t.Fatal("left the server down")
+	}
+}

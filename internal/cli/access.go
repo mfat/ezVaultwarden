@@ -274,7 +274,8 @@ func (a *app) portProblem() string {
 	case err == nil:
 		return ""
 	case errors.Is(err, syscall.EACCES):
-		return "Port 443 needs permission once. Run this in another terminal:\n" +
+		return "Port 443 needs permission once. This lets every program on this machine use it.\n" +
+			"  Run this in another terminal, or run ezVaultwarden as root:\n" +
 			"    echo 'net.ipv4.ip_unprivileged_port_start=443' | sudo tee /etc/sysctl.d/90-ezvaultwarden.conf\n" +
 			"    sudo sysctl --system"
 	case errors.Is(err, syscall.EADDRINUSE):
@@ -301,14 +302,42 @@ func (a *app) dnsProblem(ctx context.Context, host string) string {
 	if err != nil {
 		return fmt.Sprintf("Couldn't look up %s: %v", host, err)
 	}
+	matched := false
+	var others []string
 	for _, addr := range found {
-		if addr == ip {
-			return ""
+		switch {
+		case addr == ip:
+			matched = true
+		case !onThisMachine(addr):
+			others = append(others, addr)
 		}
 	}
-	return fmt.Sprintf("%s doesn't point to this machine yet. At your domain provider, add this record:\n"+
-		"    A  %s  %s\n"+
-		"  If a proxy is on for this name, such as Cloudflare's orange cloud, turn it off.", host, host, ip)
+	if !matched {
+		return fmt.Sprintf("%s doesn't point to this machine yet. At your domain provider, add this record:\n"+
+			"    A  %s  %s\n"+
+			"  If a proxy is on for this name, such as Cloudflare's orange cloud, turn it off.", host, host, ip)
+	}
+	if len(others) > 0 {
+		return fmt.Sprintf("%s also points to %s, so some devices would go there instead.\n"+
+			"  At your domain provider, remove those records, keeping only %s.", host, strings.Join(others, ", "), ip)
+	}
+	return ""
+}
+
+// onThisMachine accepts an IPv6 address the machine really has. publicIP only
+// reports the IPv4 one.
+func onThisMachine(addr string) bool {
+	want := net.ParseIP(addr)
+	found, err := net.InterfaceAddrs()
+	if want == nil || err != nil {
+		return false
+	}
+	for _, a := range found {
+		if ipnet, ok := a.(*net.IPNet); ok && ipnet.IP.Equal(want) {
+			return true
+		}
+	}
+	return false
 }
 
 var outside = &http.Client{Timeout: 10 * time.Second}
@@ -340,7 +369,19 @@ func publicIP(ctx context.Context) (string, error) {
 // resolve uses DNS over HTTPS, because many networks intercept or filter ordinary
 // DNS and Let's Encrypt sees the public answer anyway.
 func resolve(ctx context.Context, host string) ([]string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://1.1.1.1/dns-query?type=A&name="+host, nil)
+	v4, err := resolveType(ctx, host, "A", 1)
+	if err != nil {
+		return nil, err
+	}
+	v6, err := resolveType(ctx, host, "AAAA", 28)
+	if err != nil {
+		return nil, err
+	}
+	return append(v4, v6...), nil
+}
+
+func resolveType(ctx context.Context, host, kind string, code int) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://1.1.1.1/dns-query?type="+kind+"&name="+host, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +402,7 @@ func resolve(ctx context.Context, host string) ([]string, error) {
 	}
 	var found []string
 	for _, answer := range reply.Answer {
-		if answer.Type == 1 {
+		if answer.Type == code {
 			found = append(found, answer.Data)
 		}
 	}
@@ -370,6 +411,9 @@ func resolve(ctx context.Context, host string) ([]string, error) {
 
 // confirmAddress proves the chosen address works before asking for an account.
 func (a *app) confirmAddress(ctx context.Context, s config.State) error {
+	if !a.rt.Running() {
+		return nil
+	}
 	switch s.Mode {
 	case "tailnet":
 		if err := a.reachable(ctx, s.URL()); err != nil {
@@ -393,11 +437,10 @@ func (a *app) showAccountStep(s config.State) {
 	case "tailnet":
 		fmt.Fprintf(a.out, "\nOpen %s and create your account.\nOnly your own devices can reach this.\n", s.URL())
 	case "public":
-		a.warn("Create your account now.")
-		fmt.Fprintln(a.out, "  Signups are open, so until you do, anyone who finds this address could register.")
-		fmt.Fprintf(a.out, "  Open %s and create your account. Signups close automatically.\n\n", s.URL())
-		fmt.Fprintln(a.out, "  If you have to stop, close them yourself: ezvaultwarden signups close")
-		fmt.Fprintln(a.out, "  Then finish later with: ezvaultwarden init")
+		fmt.Fprintln(a.out, "\nOpen this private link and create your account:")
+		fmt.Fprintf(a.out, "  %s/?setup=%s\n", s.URL(), s.SetupToken)
+		fmt.Fprintln(a.out, "Only that link can create an account, so keep it to yourself. Signups close after the")
+		fmt.Fprintln(a.out, "first one. If you have to stop, nobody else can register. Finish later with: ezvaultwarden init")
 	default:
 		if os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "" {
 			fmt.Fprintf(a.out, "\nOpen %s and create your account.\n", s.URL())
@@ -474,6 +517,9 @@ func (a *app) exposePublic(ctx context.Context, s config.State, args []string) e
 		return err
 	}
 	before := s
+	if err := a.closeTailnet(ctx, before); err != nil {
+		return err
+	}
 	s.Mode, s.Hostname = "public", host
 	err = a.applyMode(ctx, s)
 	if err == nil {
@@ -483,6 +529,7 @@ func (a *app) exposePublic(ctx context.Context, s config.State, args []string) e
 		if undoErr := a.applyMode(ctx, before); undoErr != nil {
 			a.warn("Couldn't go back to the previous address: %v", undoErr)
 		}
+		a.restoreTailnet(ctx, before)
 		return err
 	}
 	a.leaveMode(ctx, before)
@@ -492,12 +539,49 @@ func (a *app) exposePublic(ctx context.Context, s config.State, args []string) e
 
 // leaveMode tidies up what the previous mode left outside this folder.
 func (a *app) leaveMode(ctx context.Context, before config.State) {
-	switch {
-	case before.Mode == "tailnet":
-		if err := a.ts.StopServing(ctx); err != nil {
-			a.warn("Couldn't stop Tailscale serving the vault: %v", err)
-		}
-	case before.UsesLego():
+	if before.UsesLego() {
 		a.dropDNS(ctx, before)
 	}
+}
+
+// closeTailnet comes first and must succeed. Tailscale forwards straight to the
+// server, past Caddy, so changing our own config wouldn't close it.
+func (a *app) closeTailnet(ctx context.Context, s config.State) error {
+	if s.Mode != "tailnet" {
+		return nil
+	}
+	if err := a.ts.StopServing(ctx); err != nil {
+		return fmt.Errorf("Tailscale can still reach your vault, so nothing changed: %w", err)
+	}
+	target, err := a.ts.Proxying(ctx, s.Hostname)
+	if err != nil {
+		return fmt.Errorf("couldn't confirm Tailscale stopped, so nothing changed: %w", err)
+	}
+	if target != "" {
+		return errors.New("Tailscale can still reach your vault, so nothing changed")
+	}
+	return nil
+}
+
+// restoreTailnet puts access back after a failed change.
+func (a *app) restoreTailnet(ctx context.Context, s config.State) {
+	if s.Mode != "tailnet" {
+		return
+	}
+	if err := a.ts.Serve(ctx, fmt.Sprintf("http://127.0.0.1:%d", s.BackendPort)); err != nil {
+		a.warn("Couldn't turn Tailscale back on: %v", err)
+	}
+}
+
+// tailnetLeak finds Tailscale still forwarding to the vault outside tailnet mode.
+func (a *app) tailnetLeak(ctx context.Context, s config.State) bool {
+	if s.Mode == "tailnet" {
+		return false
+	}
+	host, err := a.ts.Lookup(ctx)
+	if err != nil {
+		return false
+	}
+	target, err := a.ts.Proxying(ctx, host)
+	return err == nil && target == fmt.Sprintf("http://127.0.0.1:%d", s.BackendPort)
 }

@@ -72,7 +72,7 @@ func setup(t *testing.T, input string) *harness {
 	out := &bytes.Buffer{}
 	return &harness{
 		app: &app{
-			out: out, in: reader(input), paths: paths, rt: rt,
+			out: out, in: reader(input), paths: paths, rt: rt, ts: &fakeTailnet{},
 			now:    func() time.Time { return time.Date(2026, 11, 1, 3, 0, 0, 0, time.UTC) },
 			health: func(context.Context, config.State) error { return nil },
 		},

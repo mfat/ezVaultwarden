@@ -445,3 +445,119 @@ func TestRepeatingAModeToRepairItDoesntAsk(t *testing.T) {
 		t.Fatalf("%v, served %q", err, ts.served)
 	}
 }
+
+func TestPublicSetupClosesToStrangersUntilTheLink(t *testing.T) {
+	s := config.State{Mode: "public", Hostname: myDomain, SetupToken: "abc123", Port: 8443, BackendPort: 18443}
+	caddy := config.Caddyfile(config.Paths{Root: "/r"}, s)
+	for _, want := range []string{"query setup=abc123", "not header Cookie *ezsetup=abc123*", "/identity/accounts/register/*", "respond @signup 403", "HttpOnly"} {
+		if !strings.Contains(caddy, want) {
+			t.Fatalf("missing %q:\n%s", want, caddy)
+		}
+	}
+	s.SetupToken = ""
+	if strings.Contains(config.Caddyfile(config.Paths{Root: "/r"}, s), "@signup") {
+		t.Fatal("the gate outlived setup")
+	}
+}
+
+func TestAccountStepShowsThePrivateLink(t *testing.T) {
+	h, _, _ := planSetup(t, "")
+	h.showAccountStep(config.State{Mode: "public", Hostname: myDomain, SetupToken: "abc123"})
+	if !strings.Contains(h.output.String(), "https://"+myDomain+"/?setup=abc123") {
+		t.Fatalf("no link: %s", h.output)
+	}
+}
+
+func TestExposeLocalFailsIfTailscaleCantBeClosed(t *testing.T) {
+	h, ts, _ := planSetup(t, "")
+	if err := h.expose([]string{"tailnet", "--yes"}); err != nil {
+		t.Fatal(err)
+	}
+	ts.stopErr = errors.New("daemon down")
+	if err := h.expose([]string{"local", "--yes"}); err == nil {
+		t.Fatal("claimed local while Tailscale was open")
+	}
+	if strings.Contains(h.output.String(), "Back to this machine only") {
+		t.Fatalf("false claim: %s", h.output)
+	}
+	if s, _ := h.load(); s.Mode != "tailnet" {
+		t.Fatalf("mode %s", s.Mode)
+	}
+}
+
+func TestExposeLocalChecksTailscaleReallyStopped(t *testing.T) {
+	h, ts, _ := planSetup(t, "")
+	if err := h.expose([]string{"tailnet", "--yes"}); err != nil {
+		t.Fatal(err)
+	}
+	ts.current = ts.served // StopServing "worked", but it's still forwarding
+	if err := h.expose([]string{"local", "--yes"}); err == nil {
+		t.Fatal("claimed local while Tailscale was open")
+	}
+}
+
+func TestStatusNoticesTailscaleLeftOpen(t *testing.T) {
+	h, ts, _ := planSetup(t, "")
+	ts.current = "http://127.0.0.1:18443"
+	if err := h.status(nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(h.output.String(), "Tailscale can still reach your vault") {
+		t.Fatalf("no warning: %s", h.output)
+	}
+}
+
+func TestAStoppedServerStaysStoppedWhenSettingsChange(t *testing.T) {
+	h, _, _ := planSetup(t, "")
+	h.rt.running = false
+	if err := h.signups([]string{"open"}); err != nil {
+		t.Fatal(err)
+	}
+	if h.rt.running {
+		t.Fatal("started a server that was stopped on purpose")
+	}
+	if !strings.Contains(env(t, h), "SIGNUPS_ALLOWED=true") {
+		t.Fatal("the setting wasn't saved")
+	}
+}
+
+func TestDNSMustPointOnlyHere(t *testing.T) {
+	h, _, _ := planSetup(t, "")
+	h.resolve = func(context.Context, string) ([]string, error) { return []string{myIP, "198.51.100.9"}, nil }
+	if p := h.dnsProblem(context.Background(), myDomain); !strings.Contains(p, "also points to 198.51.100.9") {
+		t.Fatalf("got %q", p)
+	}
+	h.resolve = func(context.Context, string) ([]string, error) { return []string{myIP, "2001:db8::1"}, nil }
+	if p := h.dnsProblem(context.Background(), myDomain); !strings.Contains(p, "2001:db8::1") {
+		t.Fatalf("got %q", p)
+	}
+}
+
+func TestOnlyOneOperationAtATime(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".lock")
+	unlock, err := lock(path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lock(path, 0); err == nil || !strings.Contains(err.Error(), "another") {
+		t.Fatalf("got %v", err)
+	}
+	unlock()
+	again, err := lock(path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again()
+}
+
+func TestSignupsReopenedShowInJSON(t *testing.T) {
+	h, _, _ := planSetup(t, "")
+	if err := os.WriteFile(filepath.Join(h.paths.Data(), "config.json"), []byte(`{"signups_allowed":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := h.load()
+	r := h.report(s)
+	if r.SignupsClosed || len(r.Warnings) == 0 {
+		t.Fatalf("%+v", r)
+	}
+}

@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -69,6 +71,14 @@ func (a *app) init(args []string) error {
 	return a.finish(ctx, s, f)
 }
 
+func newSetupToken() (string, error) {
+	raw := make([]byte, 16)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(raw), nil
+}
+
 func (a *app) hasAccount() bool {
 	emails, _ := vault.Accounts(a.paths.Data())
 	return len(emails) > 0
@@ -103,6 +113,11 @@ func (a *app) install(ctx context.Context, f initFlags, plan accessPlan) (config
 	s = config.State{
 		Version: fetch.VaultwardenVersion, Runtime: a.rt.Name(), Mode: plan.mode, Hostname: plan.host,
 		Port: f.port, BackendPort: backendPort, BackupRecipient: recipient,
+	}
+	if plan.mode == "public" {
+		if s.SetupToken, err = newSetupToken(); err != nil {
+			return s, err
+		}
 	}
 	if err := config.Write(a.paths, s); err != nil {
 		return s, err
@@ -251,6 +266,15 @@ func (a *app) finish(ctx context.Context, s config.State, f initFlags) error {
 			return err
 		}
 	}
+	if s.Mode == "public" && s.SetupToken == "" {
+		var err error
+		if s.SetupToken, err = newSetupToken(); err != nil {
+			return err
+		}
+		if err := a.applyMode(ctx, s); err != nil {
+			return err
+		}
+	}
 	if err := a.confirmAddress(ctx, s); err != nil {
 		return err
 	}
@@ -259,17 +283,8 @@ func (a *app) finish(ctx context.Context, s config.State, f initFlags) error {
 		return err
 	}
 	a.ok("Account created: %s", email)
-	s.SignupsClosed = true
-	if err := config.Write(a.paths, s); err != nil {
-		return err
-	}
-	if err := config.Save(a.paths, s); err != nil {
-		return err
-	}
-	if err := a.rt.RestartVault(); err != nil {
-		return err
-	}
-	if err := a.health(ctx, s); err != nil {
+	s.SignupsClosed, s.SetupToken = true, ""
+	if err := a.applyMode(ctx, s); err != nil {
 		return err
 	}
 	a.ok("Signups closed, nobody else can register")
@@ -308,7 +323,11 @@ func (a *app) showRecoveryKit(s config.State, email string, f initFlags) error {
 	if err != nil {
 		return err
 	}
-	key := strings.TrimSpace(string(raw))
+	// Unattended output ends up in logs, so the key stays in its file.
+	shownKey := strings.TrimSpace(string(raw))
+	if f.assume {
+		shownKey = "in " + a.paths.PendingKey()
+	}
 	fmt.Fprintf(a.out, `
 Your recovery kit. Print it or write it down, and keep it somewhere safe.
 
@@ -320,7 +339,7 @@ Your recovery kit. Print it or write it down, and keep it somewhere safe.
 Nobody can recover your master password, including this tool.
 Without the backup key, your backups can't be restored.
 
-`, s.URL(), email, key)
+`, s.URL(), email, shownKey)
 	if !f.assume {
 		for {
 			saved, err := a.confirm("Saved it?", false)
@@ -334,6 +353,7 @@ Without the backup key, your backups can't be restored.
 		}
 		return os.Remove(a.paths.PendingKey())
 	}
-	fmt.Fprintf(a.out, "Running with --yes, so the key stays in %s until you move it.\n", a.paths.PendingKey())
+	a.warn("The backup key is still on this server, in %s.", a.paths.PendingKey())
+	fmt.Fprintln(a.out, "  Anyone who reaches this server can read your backups until you move it somewhere safe.")
 	return nil
 }
