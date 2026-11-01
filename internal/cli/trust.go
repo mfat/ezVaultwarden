@@ -1,72 +1,25 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 )
 
-// A trust store, as each family of distributions lays it out.
-type trustStore struct {
-	refresh string
-	anchor  string
+// v0.2.0 and earlier could add the local certificate to the system's store.
+// We no longer touch that store, so uninstall only says how to clear a copy
+// left behind.
+var oldAnchors = []struct{ path, refresh string }{
+	{"/usr/local/share/ca-certificates/ezvaultwarden.crt", "update-ca-certificates"},   // Debian, Ubuntu
+	{"/etc/pki/ca-trust/source/anchors/ezvaultwarden.crt", "update-ca-trust"},          // Fedora, RHEL
+	{"/etc/ca-certificates/trust-source/anchors/ezvaultwarden.crt", "update-ca-trust"}, // Arch
 }
 
-var trustStores = []trustStore{
-	{"update-ca-certificates", "/usr/local/share/ca-certificates/ezvaultwarden.crt"},   // Debian, Ubuntu
-	{"update-ca-trust", "/etc/pki/ca-trust/source/anchors/ezvaultwarden.crt"},          // Fedora, RHEL
-	{"update-ca-trust", "/etc/ca-certificates/trust-source/anchors/ezvaultwarden.crt"}, // Arch
-}
-
-func findTrustStore() (trustStore, error) {
-	for _, store := range trustStores {
-		if _, err := exec.LookPath(store.refresh); err != nil {
+func (a *app) warnAboutOldAnchors() {
+	for _, anchor := range oldAnchors {
+		if _, err := os.Stat(anchor.path); err != nil {
 			continue
 		}
-		if _, err := os.Stat(parentDir(store.anchor)); err == nil {
-			return store, nil
-		}
+		a.warn("An older version added this server's certificate to your system. Remove it with:")
+		fmt.Fprintf(a.out, "  sudo rm -f %s && sudo %s\n", anchor.path, anchor.refresh)
 	}
-	return trustStore{}, errors.New("this system's certificate store isn't one we recognise")
-}
-
-func parentDir(path string) string {
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == '/' {
-			return path[:i]
-		}
-	}
-	return "."
-}
-
-func sudo(args ...string) error {
-	cmd := exec.Command("sudo", args...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("sudo %s: %w", args[0], err)
-	}
-	return nil
-}
-
-func trustCertificate(cert string) error {
-	store, err := findTrustStore()
-	if err != nil {
-		return err
-	}
-	if err := sudo("install", "-m", "0644", cert, store.anchor); err != nil {
-		return err
-	}
-	return sudo(store.refresh)
-}
-
-func untrustCertificate() error {
-	store, err := findTrustStore()
-	if err != nil {
-		return err
-	}
-	if err := sudo("rm", "-f", store.anchor); err != nil {
-		return err
-	}
-	return sudo(store.refresh)
 }

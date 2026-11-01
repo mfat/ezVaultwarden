@@ -12,7 +12,7 @@ page, and clean removal. See [test/e2e](../test/e2e/README.md).
 
 **Not proven yet:**
 
-- Trusting the certificate with `sudo`, and how Linux browsers behave
+- Importing the certificate into Linux browsers, and whether clients then accept it
 - A real browser signup, and the interactive prompts
 - A real Linux machine, and surviving a reboot
 - Self-update from a real GitHub release. The first test is v0.2.0 to the next one

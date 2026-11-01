@@ -58,7 +58,6 @@ type State struct {
 	Port            int       `json:"port"`
 	BackendPort     int       `json:"backend_port"`
 	SignupsClosed   bool      `json:"signups_closed"`
-	Trusted         bool      `json:"trusted"`
 	BackupRecipient string    `json:"backup_recipient"`
 	BackupTargets   []string  `json:"backup_targets,omitempty"`
 

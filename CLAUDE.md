@@ -23,7 +23,7 @@ real Linux machine**, so treat that as the first thing to find out.
 ## Next steps, in order
 
 1. **Check it on real Linux with the maintainer.** Use throwaway data:
-   - the certificate `sudo` prompt, and whether browsers then trust the page
+   - importing the certificate by hand, and whether browsers then trust the page
    - a real browser signup, with `init` noticing it and closing signups
    - the recovery kit and "Saved it?" prompts, which only `--yes` has exercised
    - a reboot: does the vault come back by itself?

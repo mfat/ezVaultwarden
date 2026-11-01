@@ -100,7 +100,7 @@ class Suite:
 
     def init_and_register(self):
         log = self.work / "init.log"
-        proc = subprocess.Popen(f"{self.bindir}/ezvaultwarden init --yes --no-trust > {log} 2>&1",
+        proc = subprocess.Popen(f"{self.bindir}/ezvaultwarden init --yes > {log} 2>&1",
                                 shell=True, executable="/bin/bash", env=self.env,
                                 stdin=subprocess.DEVNULL)
         deadline = time.time() + 900
@@ -263,7 +263,7 @@ def run_local(t):
     t.sh("systemctl --user stop ezvaultwarden-proxy")
     t.check("status notices one service down", "Stopped" in t.ez("status")[1])
     t.sh("systemctl --user start ezvaultwarden-proxy")
-    rc, out = t.ez("init --yes --no-trust")
+    rc, out = t.ez("init --yes")
     t.check("second init refused", rc != 0 and "already set up" in out, out[:80])
     rc, out = t.sh("systemctl --user start ezvaultwarden-backup.service; sleep 2; "
                    "systemctl --user show ezvaultwarden-backup.service -p Result")

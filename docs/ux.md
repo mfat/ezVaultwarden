@@ -22,11 +22,8 @@ $ ezvaultwarden init
 ✓ Vaultwarden 1.37.4, web vault and Caddy 2.11.7 downloaded and verified
 ✓ Service started at https://localhost:8443
 
-Trust the local certificate so browsers accept it?
-This needs your password once. [Y/n] y
-✓ Certificate trusted
-
 Open https://localhost:8443 and create your account.
+Your browser will warn you until you import ~/.local/share/ezvaultwarden/caddy/pki/authorities/local/root.crt into its certificate settings.
 Waiting for your account...
 ✓ Account created: mehdi@example.com
 ✓ Signups closed, nobody else can register
@@ -127,8 +124,8 @@ Press Enter here to close it.
 
 ## Removal
 
-`uninstall` stops everything and removes the services and the trusted certificate.
-It only deletes vault data with `--delete-data`, after you type `delete my vault`.
+`uninstall` stops everything and removes the services. It only deletes vault data
+with `--delete-data`, after you type `delete my vault`.
 
 ## Going remote *(planned)*
 
@@ -163,8 +160,9 @@ Cloudflare API token (DNS edit only): ****
 
 - **Phones and private certificates.** Phones won't trust the local CA without manual
   setup, so steer them to `tailnet` or a real certificate.
-- **The first `sudo` prompt.** Trusting the certificate needs it once, and it's the
-  only step that does. Browsers may also keep their own lists.
+- **The browser's certificate warning.** We never touch the system's certificate
+  store, so nothing needs `sudo`. The warning stays until the user imports the
+  certificate into their browser.
 - **`curl | sh`.** Convenient, but some people won't like it, so manual download
   stays documented.
 - **WSL.** Windows browsers need the certificate imported by hand, and WSL can stop

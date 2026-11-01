@@ -25,10 +25,8 @@ import (
 )
 
 type initFlags struct {
-	port    int
-	assume  bool // answer yes to everything, for scripts
-	trust   bool
-	noTrust bool
+	port   int
+	assume bool // answer yes to everything, for scripts
 }
 
 func (a *app) init(args []string) error {
@@ -36,8 +34,6 @@ func (a *app) init(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.IntVar(&f.port, "port", 8443, "port for the web vault")
 	fs.BoolVar(&f.assume, "yes", false, "don't ask questions")
-	fs.BoolVar(&f.trust, "trust", false, "trust the local certificate without asking")
-	fs.BoolVar(&f.noTrust, "no-trust", false, "skip trusting the local certificate")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -243,10 +239,6 @@ func (a *app) probe(ctx context.Context, s config.State) error {
 }
 
 func (a *app) finish(ctx context.Context, s config.State, f initFlags) error {
-	var err error
-	if s, err = a.offerTrust(s, f); err != nil {
-		return err
-	}
 	email, err := a.waitForAccount(ctx, s)
 	if err != nil {
 		return err
@@ -273,33 +265,10 @@ func (a *app) finish(ctx context.Context, s config.State, f initFlags) error {
 	return nil
 }
 
-func (a *app) offerTrust(s config.State, f initFlags) (config.State, error) {
-	if s.Trusted || f.noTrust {
-		return s, nil
-	}
-	yes := f.trust
-	if !yes && !f.assume {
-		fmt.Fprintln(a.out, "\nTrust the local certificate so browsers accept it?")
-		var err error
-		if yes, err = a.confirm("This needs your password once.", true); err != nil {
-			return s, err
-		}
-	}
-	if !yes {
-		return s, nil
-	}
-	if err := trustCertificate(a.paths.RootCert()); err != nil {
-		a.warn("Couldn't trust the certificate: %v", err)
-		fmt.Fprintf(a.out, "  Your browser will warn you. The certificate is at %s\n", a.paths.RootCert())
-		return s, nil
-	}
-	a.ok("Certificate trusted")
-	s.Trusted = true
-	return s, config.Save(a.paths, s)
-}
-
 func (a *app) waitForAccount(ctx context.Context, s config.State) (string, error) {
-	fmt.Fprintf(a.out, "\nOpen %s and create your account.\nWaiting for your account...\n", s.URL())
+	fmt.Fprintf(a.out, "\nOpen %s and create your account.\n", s.URL())
+	fmt.Fprintf(a.out, "Your browser will warn you until you import %s into its certificate settings.\n", a.paths.RootCert())
+	fmt.Fprintln(a.out, "Waiting for your account...")
 	for {
 		emails, err := vault.Accounts(a.paths.Data())
 		if err == nil && len(emails) > 0 {

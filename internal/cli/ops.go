@@ -28,9 +28,7 @@ func (a *app) connect([]string) error {
 	fmt.Fprintf(a.out, "Server URL: %s\n\n", s.URL())
 	fmt.Fprintln(a.out, "Browser extension or desktop app")
 	fmt.Fprintln(a.out, "  Settings > Self-hosted > paste the URL above")
-	if !s.Trusted {
-		fmt.Fprintf(a.out, "  Your browser will warn you until you trust %s\n", a.paths.RootCert())
-	}
+	fmt.Fprintf(a.out, "  Your browser will warn you until you import %s into its certificate settings\n", a.paths.RootCert())
 	fmt.Fprintln(a.out, "\nbw CLI")
 	fmt.Fprintf(a.out, "  export NODE_EXTRA_CA_CERTS=%s\n", a.paths.RootCert())
 	fmt.Fprintf(a.out, "  bw config server %s\n", s.URL())
@@ -219,8 +217,7 @@ func (a *app) uninstall(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	s, err := a.load()
-	if err != nil {
+	if _, err := a.load(); err != nil {
 		return err
 	}
 	if *deleteData {
@@ -238,13 +235,7 @@ func (a *app) uninstall(args []string) error {
 		return err
 	}
 	a.ok("Service removed")
-	if s.Trusted {
-		if err := untrustCertificate(); err != nil {
-			a.warn("Couldn't remove the trusted certificate: %v", err)
-		} else {
-			a.ok("Certificate no longer trusted")
-		}
-	}
+	a.warnAboutOldAnchors()
 	if *deleteData {
 		if err := os.RemoveAll(a.paths.Root); err != nil {
 			return err

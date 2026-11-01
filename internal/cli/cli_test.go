@@ -188,6 +188,27 @@ func TestUninstallKeepsTheVaultByDefault(t *testing.T) {
 	}
 }
 
+func TestUninstallPointsAtACertificateAnOlderVersionLeftBehind(t *testing.T) {
+	saved := oldAnchors
+	t.Cleanup(func() { oldAnchors = saved })
+	left := filepath.Join(t.TempDir(), "ezvaultwarden.crt")
+	if err := os.WriteFile(left, []byte("cert"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldAnchors = []struct{ path, refresh string }{{left, "update-ca-certificates"}}
+
+	h := setup(t, "")
+	if err := h.uninstall(nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(h.output.String(), "sudo rm -f "+left) {
+		t.Fatalf("nothing says how to remove it: %s", h.output)
+	}
+	if _, err := os.Stat(left); err != nil {
+		t.Fatalf("uninstall touched the system's store: %v", err)
+	}
+}
+
 func TestDeletingTheVaultNeedsTheExactPhrase(t *testing.T) {
 	h := setup(t, "yes\n")
 	if err := h.uninstall([]string{"--delete-data"}); err == nil {

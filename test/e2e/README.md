@@ -48,7 +48,6 @@ Data lives in a temp folder, and the account and password are generated per run.
 
 ## What they can't cover
 
-- Trusting the certificate, which needs `sudo` and a person
 - The web vault in a real browser. `account.py` registers through the same API.
 - The interactive prompts, because they run with `--yes`
 - Self-update from a real GitHub release, which uses a local stand-in here
