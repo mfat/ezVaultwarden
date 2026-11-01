@@ -115,8 +115,9 @@ func (a *app) saveDNSToken(ctx context.Context, host string) error {
 		}
 		a.warn("The saved Cloudflare token doesn't work for %s.", host)
 	}
-	fmt.Fprintln(a.out, "ezVaultwarden needs a Cloudflare API token. On the page that opens, narrow it to")
-	fmt.Fprintln(a.out, "this domain, create it, and paste it here:")
+	fmt.Fprintln(a.out, "ezVaultwarden needs a Cloudflare API token. On the page that opens, set Zone")
+	fmt.Fprintf(a.out, "Resources to the main domain that holds %s. Cloudflare can't limit a token\n", host)
+	fmt.Fprintln(a.out, "to one subdomain. Create it, and paste it here:")
 	fmt.Fprintf(a.out, "  %s\n", cloudflare.TokenURL)
 	a.openLink(cloudflare.TokenURL)
 	token, err := a.secret("Cloudflare API token: ")
