@@ -2,8 +2,8 @@
 
 ## Where it stands
 
-v0.2.0 runs Vaultwarden on Linux, reachable from that machine only, with backups,
-updates and rollback. It's early: the README warns against real passwords until the
+v0.3.0 runs Vaultwarden on Linux, reachable from that machine only, over Tailscale, or
+on the public internet with your own domain, with backups, updates and rollback. It's early: the README warns against real passwords until the
 first items below are done.
 
 **Proven end to end, in WSL:** install, signups closing, backup and restore with
@@ -40,7 +40,7 @@ and the vault returning after a reboot with nobody logged in.
    recovery is why backups exist.
 3. **Clean up old copies.** `data.before-restore-*` and `data.replaced-*` are never
    removed. They're plain copies, so they shouldn't pile up.
-4. **Fix what real use finds,** then remove the README warning and release v0.3.0.
+4. **Fix what real use finds,** then remove the README warning.
 
 ## Then
 

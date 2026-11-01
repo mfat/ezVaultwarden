@@ -13,9 +13,9 @@ Read these before designing anything:
 
 ## Current state
 
-v0.2.0 is released. It's reachable from the same machine only, or over an SSH tunnel
-(untested). The README warns against real passwords, and that stays until the
-Linux checks below are done.
+v0.3.0 is released. Its setup wizard offers this computer only, Tailscale, or the
+public internet with your own domain. The README warns against real passwords, and
+that stays until the Linux checks below are done.
 
 It was developed on Windows and tested in WSL. A first run on a real Linux machine
 worked: install, a browser signup closing signups, the "Saved it?" prompt, the web
@@ -32,8 +32,7 @@ Ubuntu 24.04 VPS passed the end-to-end tests, the setup menu and a reboot.
 2. **`init --from-backup`.** Restoring on a new machine is untested and undocumented.
 3. **Clean up** `data.before-restore-*` and `data.replaced-*`, which are plain copies
    that nothing removes.
-4. **Fix what real use finds,** drop the README warning, release v0.3.0. That's also
-   the first real test of self-update, from v0.2.0.
+4. **Fix what real use finds,** then drop the README warning.
 5. **`tailnet` mode.** `expose tailnet` works on a real tailnet.
 6. **`public` mode.** Caddy on port 443, from the setup wizard or `expose public`.
 7. **`expose lan` is hidden.** It's built with `lego` and Cloudflare, and stays out of the
