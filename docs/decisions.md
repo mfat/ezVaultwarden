@@ -68,7 +68,9 @@ instead.
 ## The token stays, for now
 
 Nginx Proxy Manager and similar tools also ask for a pasted token, because creating one
-takes a logged-in person. So we cut everything around it: a pre-filled page, a check
+takes a logged-in person. The page can't preselect a domain: it ignored a domain name in
+`zoneId`, and we couldn't know the zone ID before having a token anyway. So we cut
+everything around it: a pre-filled page, a check
 before saving, and a DNS record we create and keep up to date. Only records carrying
 our comment are ever changed or deleted, so a name already in use is left alone.
 

@@ -158,9 +158,9 @@ The name vault.example.com goes into public certificate logs, and public DNS
 will show this machine's local address.
 Continuing accepts Let's Encrypt's terms: https://letsencrypt.org/repository/
 Continue? [y/N] y
-ezVaultwarden needs a Cloudflare API token. On the page that opens, set Zone
-Resources to the main domain that holds vault.example.com. Cloudflare can't limit a token
-to one subdomain. Create it, and paste it here:
+ezVaultwarden needs a Cloudflare API token. On the page that opens, click
+Continue to summary, then Create Token. If this account has other domains, first
+set Zone Resources to the one that holds vault.example.com. Paste the token here:
   https://dash.cloudflare.com/profile/api-tokens?...
 Cloudflare API token:
 ✓ Certificate issued for vault.example.com, renews automatically
