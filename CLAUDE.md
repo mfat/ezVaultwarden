@@ -35,8 +35,9 @@ That run used v0.2.0, which still had the system certificate step.
 4. **Fix what real use finds,** drop the README warning, release v0.3.0. That's also
    the first real test of self-update, from v0.2.0.
 5. **`tailnet` mode.** `expose tailnet` works on a real tailnet.
-6. **Let's Encrypt over the DNS challenge.** `expose lan` is built with `lego` and
-   Cloudflare, and needs a real domain to prove issuing and renewal.
+6. **Let's Encrypt over the DNS challenge.** `expose lan` got a real certificate and set
+   the DNS record on a real domain. Connecting from another device and a real renewal
+   are unproven, and that network blocks public names holding private addresses.
 
 Decided but not built: see the roadmap. WSL detection with a Windows certificate
 step is a small addition worth making alongside item 2.

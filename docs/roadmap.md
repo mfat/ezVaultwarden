@@ -20,9 +20,9 @@ and a browser extension logging in.
 - The desktop app logging in
 - Surviving a reboot
 - `expose local` from `tailnet` on a real machine, and a phone's Bitwarden app
-- `expose lan` with a real domain, and a real renewal. `lego` 5's renewal behaviour is
-  from its docs, and the Cloudflare calls are only tested against a stand-in
-- Cloudflare's pre-filled token page, signed in
+- `expose lan` reaching the vault from another device. On a real domain it issued a
+  Let's Encrypt certificate and set the DNS record, but that network blocked the name
+- A real renewal. `lego` 5's renewal behaviour is from its docs
 - Self-update from a real GitHub release. The first test is v0.2.0 to the next one
 - The `arm64` build, which has been built but never run
 
