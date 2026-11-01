@@ -36,6 +36,7 @@ func (p Paths) join(elem ...string) string {
 }
 
 func (p Paths) State() string      { return p.join("state.json") }
+func (p Paths) Snapshot() string   { return p.join("data.before-update") }
 func (p Paths) Data() string       { return p.join("data") }
 func (p Paths) Backups() string    { return p.join("backups") }
 func (p Paths) Versions() string   { return p.join("versions") }
@@ -50,15 +51,25 @@ func (p Paths) RootCert() string {
 
 // State is everything chosen at setup.
 type State struct {
-	Version         string   `json:"version"`
-	Runtime         string   `json:"runtime"`
-	Mode            string   `json:"mode"`
-	Port            int      `json:"port"`
-	BackendPort     int      `json:"backend_port"`
-	SignupsClosed   bool     `json:"signups_closed"`
-	Trusted         bool     `json:"trusted"`
-	BackupRecipient string   `json:"backup_recipient"`
-	BackupTargets   []string `json:"backup_targets,omitempty"`
+	Previous        *Previous `json:"previous,omitempty"`
+	Version         string    `json:"version"`
+	Runtime         string    `json:"runtime"`
+	Mode            string    `json:"mode"`
+	Port            int       `json:"port"`
+	BackendPort     int       `json:"backend_port"`
+	SignupsClosed   bool      `json:"signups_closed"`
+	Trusted         bool      `json:"trusted"`
+	BackupRecipient string    `json:"backup_recipient"`
+	BackupTargets   []string  `json:"backup_targets,omitempty"`
+
+	// AdminToken is set only while the admin page is open, and never saved.
+	AdminToken string `json:"-"`
+}
+
+// Previous is what rollback returns to.
+type Previous struct {
+	ID      string `json:"id"`
+	Version string `json:"version"`
 }
 
 // URL is the address clients use.
@@ -119,6 +130,10 @@ func VaultwardenEnv(p Paths, s State) string {
 		fmt.Sprintf("SIGNUPS_ALLOWED=%t", !s.SignupsClosed),
 		"INVITATIONS_ALLOWED=false",
 		"SHOW_PASSWORD_HINT=false",
+	}
+	if s.AdminToken != "" {
+		// Quoted: a hash is full of $, which must reach Vaultwarden unexpanded.
+		lines = append(lines, "ADMIN_TOKEN='"+s.AdminToken+"'")
 	}
 	return strings.Join(lines, "\n") + "\n"
 }

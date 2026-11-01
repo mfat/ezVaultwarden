@@ -44,7 +44,8 @@ Then run `ezvaultwarden init`.
 |---|---|
 | Linux native, `local` mode | In progress |
 | Encrypted backup and restore | In progress |
-| `update` with automatic rollback | Planned |
+| `update` with automatic rollback | Working, needs real-world use |
+| Temporary admin page | Working, needs real-world use |
 | Docker and Podman | Planned |
 | `lan` and `tailnet` modes | Planned |
 | `public` mode with Let's Encrypt | Planned |
@@ -60,8 +61,41 @@ Then run `ezvaultwarden init`.
 | `start`, `stop` | Start or stop the server |
 | `backup` | Make a backup now (`--target DIR` keeps copies elsewhere too) |
 | `restore` | Restore a backup, keeping a safety copy of the current vault |
+| `update` | Update ezVaultwarden, Vaultwarden and Caddy, rolling back by itself if the result isn't healthy (`--check` only looks) |
+| `rollback` | Go back to the version and data from before the last update |
+| `admin` | Open Vaultwarden's admin page until you close it |
 | `logs` | Show recent server logs |
 | `uninstall` | Remove the service. Your vault stays unless you pass `--delete-data` |
+
+## Updates
+
+`update` replaces ezVaultwarden, then upgrades Vaultwarden and Caddy to the
+versions that release was tested with. It takes an encrypted backup and a local
+copy of your data first. If the new version doesn't come up healthy, it returns
+to the old binaries and that data by itself.
+
+The binaries can't go back alone: a new Vaultwarden may upgrade the database in a
+way the old one can't read. So `rollback` also returns your data to the moment
+before the update. Changes made since then are set aside in a `data.replaced-*`
+folder, not kept in the vault.
+
+The local copy, `data.before-update`, stays until the next update. It's as
+sensitive as the `data` folder next to it, and is protected the same way.
+
+Keep up with updates, because apps move fast. The `bw` CLI 2026.10.1 can't log in
+to Vaultwarden 1.37.3, for example, though it works with 1.37.4.
+
+Coming from v0.1.0? It has no `update` command, so rerun the install line once.
+
+## Admin page
+
+Vaultwarden's admin page stays off, because a page that doesn't exist can't be
+attacked. `ezvaultwarden admin` opens it with a one-time password, stored only as
+an Argon2 hash, and closes it when you press Enter.
+
+Settings saved there go into Vaultwarden's `config.json`, which beats
+ezVaultwarden's own. Saving there can reopen signups, so `status` warns you if
+that has happened.
 
 ## After a restore
 

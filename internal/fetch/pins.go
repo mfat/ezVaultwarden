@@ -9,6 +9,9 @@ const (
 	CaddyVersion       = "2.11.7"
 )
 
+// VersionID names the folder holding this exact set of components.
+func VersionID() string { return VaultwardenVersion + "+caddy" + CaddyVersion }
+
 // VaultwardenImage is the 1.37.4-alpine index, whose binaries are static.
 var VaultwardenImage = Image{
 	Registry: "https://registry-1.docker.io",

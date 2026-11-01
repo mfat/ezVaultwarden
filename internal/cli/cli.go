@@ -4,6 +4,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -33,6 +34,9 @@ const usage = `ezVaultwarden: run your own Vaultwarden.
   stop        Stop the server
   backup      Make an encrypted backup now
   restore     Restore a backup
+  update      Update, with automatic rollback (--check only looks)
+  rollback    Go back to the version before the last update
+  admin       Open Vaultwarden's admin page until you close it
   logs        Show recent server logs
   uninstall   Remove the service (your vault stays unless you ask)
   version     Show the version
@@ -46,6 +50,8 @@ type app struct {
 	paths config.Paths
 	rt    runtime.Runtime
 	now   func() time.Time
+
+	health func(context.Context, config.State) error
 }
 
 // Run executes one command and returns the process exit code.
@@ -62,6 +68,7 @@ func Run(args []string) int {
 		rt:    runtime.Systemd{Paths: paths},
 		now:   time.Now,
 	}
+	a.health = a.verify
 	if len(args) == 0 {
 		fmt.Fprint(a.out, usage)
 		return 0
@@ -74,6 +81,9 @@ func Run(args []string) int {
 		"stop":      a.stop,
 		"backup":    a.backup,
 		"restore":   a.restore,
+		"update":    a.update,
+		"rollback":  a.rollback,
+		"admin":     a.admin,
 		"logs":      a.logs,
 		"uninstall": a.uninstall,
 		"version": func([]string) error {
@@ -234,10 +244,19 @@ func (a *app) status(args []string) error {
 		}
 		fmt.Fprintf(a.out, "  Backups   Last %s, %d kept, %s\n", r.LastBackup, r.Backups, where)
 	}
+	overrides := a.overrides(s)
 	signups := "signups closed"
 	if !r.SignupsClosed {
 		signups = "⚠ signups OPEN, finish with: ezvaultwarden init"
+	} else if a.signupsReopened() {
+		signups = "⚠ signups OPEN"
 	}
 	fmt.Fprintf(a.out, "  Accounts  %d, %s\n", len(r.Accounts), signups)
+	if a.adminLeftOpen() {
+		a.warn("The admin page is open. Close it with: ezvaultwarden admin --close")
+	}
+	for _, problem := range overrides {
+		a.warn("%s", problem)
+	}
 	return nil
 }

@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -69,7 +70,8 @@ func setup(t *testing.T, input string) *harness {
 	return &harness{
 		app: &app{
 			out: out, in: bufio.NewReader(strings.NewReader(input)), paths: paths, rt: rt,
-			now: func() time.Time { return time.Date(2026, 11, 1, 3, 0, 0, 0, time.UTC) },
+			now:    func() time.Time { return time.Date(2026, 11, 1, 3, 0, 0, 0, time.UTC) },
+			health: func(context.Context, config.State) error { return nil },
 		},
 		rt: rt, output: out, secret: secret,
 	}

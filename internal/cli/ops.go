@@ -175,7 +175,7 @@ func (a *app) restore(args []string) error {
 	if restoreErr != nil {
 		return restoreErr
 	}
-	if err := a.waitHealthy(context.Background(), s); err != nil {
+	if err := a.health(context.Background(), s); err != nil {
 		return err
 	}
 	a.ok("Restored and running. The previous vault is in %s", keep)

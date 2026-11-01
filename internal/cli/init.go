@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	goruntime "runtime"
@@ -115,7 +116,7 @@ func (a *app) install(ctx context.Context, f initFlags) (config.State, error) {
 	if err := a.rt.Install(self); err != nil {
 		return s, err
 	}
-	if err := a.waitHealthy(ctx, s); err != nil {
+	if err := a.health(ctx, s); err != nil {
 		return s, err
 	}
 	a.ok("Service started at %s", s.URL())
@@ -123,34 +124,47 @@ func (a *app) install(ctx context.Context, f initFlags) (config.State, error) {
 }
 
 func (a *app) download(ctx context.Context) error {
-	url, sum, err := fetch.CaddyRelease(goruntime.GOARCH)
+	dir, err := a.fetchVersion(ctx)
 	if err != nil {
 		return err
 	}
-	final := filepath.Join(a.paths.Versions(), fetch.VaultwardenVersion+"+caddy"+fetch.CaddyVersion)
+	return a.setCurrent(dir)
+}
+
+// fetchVersion returns the folder holding this build's components, downloading
+// them unless an earlier run did. The folder only appears once complete and
+// verified, so finding it is proof enough.
+func (a *app) fetchVersion(ctx context.Context) (string, error) {
+	final := filepath.Join(a.paths.Versions(), fetch.VersionID())
+	if _, err := os.Stat(final); err == nil {
+		return final, nil
+	}
+	url, sum, err := fetch.CaddyRelease(goruntime.GOARCH)
+	if err != nil {
+		return "", err
+	}
 	staged, err := os.MkdirTemp(a.paths.Versions(), ".download-")
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer os.RemoveAll(staged)
 	if err := fetch.ExtractVaultwarden(ctx, fetch.VaultwardenImage, goruntime.GOARCH, staged, a.progress("Vaultwarden")); err != nil {
-		return fmt.Errorf("downloading Vaultwarden: %w", err)
+		return "", fmt.Errorf("downloading Vaultwarden: %w", err)
 	}
 	if err := fetch.ExtractCaddy(ctx, url, sum, staged, a.progress("Caddy")); err != nil {
-		return fmt.Errorf("downloading Caddy: %w", err)
+		return "", fmt.Errorf("downloading Caddy: %w", err)
 	}
 	if err := os.Chmod(staged, 0o755); err != nil {
-		return err
+		return "", err
 	}
-	if err := os.RemoveAll(final); err != nil {
-		return err
-	}
-	if err := os.Rename(staged, final); err != nil {
-		return err
-	}
+	return final, os.Rename(staged, final)
+}
+
+// setCurrent repoints the services in one atomic step.
+func (a *app) setCurrent(dir string) error {
 	link := a.paths.Current() + ".new"
 	os.Remove(link)
-	if err := os.Symlink(final, link); err != nil {
+	if err := os.Symlink(dir, link); err != nil {
 		return err
 	}
 	return os.Rename(link, a.paths.Current())
@@ -167,6 +181,19 @@ func (a *app) progress(name string) fetch.Report {
 			fmt.Fprintf(a.out, "  %s: %d MB\n", name, received>>20)
 		}
 	}
+}
+
+// verify is what counts as a working install: the binary in place is the one
+// the state names, and it answers through the front end.
+func (a *app) verify(ctx context.Context, s config.State) error {
+	out, err := exec.CommandContext(ctx, filepath.Join(a.paths.Current(), "vaultwarden"), "--version").Output()
+	if err != nil {
+		return fmt.Errorf("the server binary doesn't run: %w", err)
+	}
+	if !strings.Contains(string(out), s.Version) {
+		return fmt.Errorf("expected Vaultwarden %s, found %s", s.Version, strings.TrimSpace(string(out)))
+	}
+	return a.waitHealthy(ctx, s)
 }
 
 // waitHealthy proves the whole path: Caddy answers over TLS with a certificate
@@ -235,7 +262,7 @@ func (a *app) finish(ctx context.Context, s config.State, f initFlags) error {
 	if err := a.rt.RestartVault(); err != nil {
 		return err
 	}
-	if err := a.waitHealthy(ctx, s); err != nil {
+	if err := a.health(ctx, s); err != nil {
 		return err
 	}
 	a.ok("Signups closed, nobody else can register")
