@@ -162,9 +162,48 @@ func (a *app) secret(prompt string) (string, error) {
 		return a.line()
 	}
 	fmt.Fprint(a.out, prompt)
-	raw, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Fprintln(a.out)
-	return strings.TrimSpace(string(raw)), err
+	old, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		return "", err
+	}
+	defer term.Restore(int(os.Stdin.Fd()), old)
+	secret, err := readMasked(os.Stdin, a.out)
+	return strings.TrimSpace(secret), err
+}
+
+// readMasked echoes a * for each character, so a paste visibly worked. The
+// terminal is in raw mode, so it handles Enter, Backspace and Ctrl-C itself.
+func readMasked(r io.Reader, w io.Writer) (string, error) {
+	var secret []byte
+	buf := make([]byte, 256)
+	for {
+		n, err := r.Read(buf)
+		for _, b := range buf[:n] {
+			switch {
+			case b == '\r' || b == '\n':
+				fmt.Fprint(w, "\r\n")
+				return string(secret), nil
+			case b == 3:
+				fmt.Fprint(w, "\r\n")
+				return "", errors.New("cancelled, nothing changed")
+			case b == 127 || b == 8:
+				if len(secret) > 0 {
+					secret = secret[:len(secret)-1]
+					fmt.Fprint(w, "\b \b")
+				}
+			case b >= 32:
+				secret = append(secret, b)
+				fmt.Fprint(w, "*")
+			}
+		}
+		if err != nil {
+			fmt.Fprint(w, "\r\n")
+			if errors.Is(err, io.EOF) {
+				return string(secret), nil
+			}
+			return "", err
+		}
+	}
 }
 
 func (a *app) load() (config.State, error) { return config.Load(a.paths) }

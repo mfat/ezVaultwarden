@@ -255,3 +255,29 @@ func TestCommandsBeforeInitSayWhatToDo(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestSecretsEchoStarsAndNeverThemselves(t *testing.T) {
+	cases := map[string]struct{ in, want, shown string }{
+		"paste":     {"abc\r", "abc", "***\r\n"},
+		"newline":   {"abc\n", "abc", "***\r\n"},
+		"backspace": {"abd\x7fc\r", "abc", "***\b \b*\r\n"},
+		"on empty":  {"\x7fa\r", "a", "*\r\n"},
+		"no enter":  {"abc", "abc", "***\r\n"},
+		"controls":  {"a\x1bb\r", "ab", "**\r\n"},
+	}
+	for name, tc := range cases {
+		var out bytes.Buffer
+		got, err := readMasked(strings.NewReader(tc.in), &out)
+		if err != nil || got != tc.want || out.String() != tc.shown {
+			t.Errorf("%s: got %q, %v, shown %q", name, got, err, out.String())
+		}
+	}
+}
+
+func TestCtrlCCancelsASecret(t *testing.T) {
+	var out bytes.Buffer
+	got, err := readMasked(strings.NewReader("abc\x03"), &out)
+	if err == nil || got != "" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
