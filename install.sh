@@ -1,9 +1,10 @@
 #!/bin/sh
-# Installs ezvaultwarden for the current user. Needs no root.
+# Installs or updates ezvaultwarden. Needs no root.
 #
 #   curl -fsSL https://raw.githubusercontent.com/mfat/ezVaultwarden/main/install.sh | sh
 #
-# EZVAULTWARDEN_INSTALL_DIR  where to put the binary (default ~/.local/bin)
+# EZVAULTWARDEN_INSTALL_DIR  where to put the binary (default ~/.local/bin, or
+#                            /usr/local/bin for root, which is already on its PATH)
 # EZVAULTWARDEN_VERSION      a release tag such as v0.1.0 (default: latest)
 
 # Everything is inside main, so a download cut off halfway runs nothing.
@@ -18,7 +19,11 @@ main() {
 		base="$repo/download/$version"
 	fi
 	base="${EZVAULTWARDEN_BASE_URL:-$base}"
-	dir="${EZVAULTWARDEN_INSTALL_DIR:-$HOME/.local/bin}"
+	default_dir="$HOME/.local/bin"
+	if [ "$(id -u)" = 0 ]; then
+		default_dir=/usr/local/bin
+	fi
+	dir="${EZVAULTWARDEN_INSTALL_DIR:-$default_dir}"
 
 	os="$(uname -s)"
 	if [ "$os" != Linux ]; then
@@ -48,22 +53,51 @@ main() {
 		fail "the download doesn't match its checksum, so nothing was installed."
 	fi
 
-	mkdir -p "$dir"
 	chmod 755 "$tmp/$asset"
-	# Same folder then rename, so a running copy is never half overwritten.
-	cp "$tmp/$asset" "$dir/.ezvaultwarden.new"
-	mv -f "$dir/.ezvaultwarden.new" "$dir/ezvaultwarden"
+	old="$(installed_version "$dir/ezvaultwarden")"
+	place "$tmp/$asset" "$dir"
+	# An older install ran from here, and its timers still call this copy.
+	if [ -x "$HOME/.local/bin/ezvaultwarden" ] && [ "$dir" != "$HOME/.local/bin" ]; then
+		[ -n "$old" ] || old="$(installed_version "$HOME/.local/bin/ezvaultwarden")"
+		place "$tmp/$asset" "$HOME/.local/bin"
+	fi
+	new="$(installed_version "$dir/ezvaultwarden")"
 
-	echo "✓ Installed to $dir/ezvaultwarden"
+	if [ -z "$old" ]; then
+		echo "✓ Installed ezVaultwarden $new to $dir"
+	elif [ "$old" = "$new" ]; then
+		echo "✓ ezVaultwarden $new is already the latest"
+	else
+		echo "✓ Updated ezVaultwarden from $old to $new"
+	fi
+
+	run=ezvaultwarden
 	case ":$PATH:" in
-	*":$dir:"*)
-		echo "Next, run: ezvaultwarden init"
-		;;
+	*":$dir:"*) ;;
 	*)
-		echo "⚠ $dir isn't on your PATH. Run it directly:"
-		echo "  $dir/ezvaultwarden init"
+		run="$dir/ezvaultwarden"
+		echo "⚠ $dir isn't on your PATH, so use the full path below."
 		;;
 	esac
+	data="${EZVAULTWARDEN_HOME:-$HOME/.local/share/ezvaultwarden}"
+	if [ -f "$data/state.json" ]; then
+		echo "Next, to update your vault too, run: $run update"
+	else
+		echo "Next, run: $run init"
+	fi
+}
+
+# Same folder then rename, so a running copy is never half overwritten.
+place() {
+	mkdir -p "$2"
+	cp "$1" "$2/.ezvaultwarden.new"
+	mv -f "$2/.ezvaultwarden.new" "$2/ezvaultwarden"
+}
+
+installed_version() {
+	if [ -x "$1" ]; then
+		"$1" version 2>/dev/null | cut -d' ' -f2
+	fi
 }
 
 fail() {

@@ -126,6 +126,5 @@ Bitwarden tests against a real server.
 - GitHub Actions warns that `actions/checkout@v4` and `actions/setup-go@v5` target
   Node.js 20, and that `ubuntu-latest` is moving to Ubuntu 26.
 - `go.mod` requires Go 1.27.3, which may be stricter than contributors need.
-- `shellcheck` hasn't been run on `install.sh`.
 - Check the MIT and AGPL position before depending on it. We only download Vaultwarden
   and don't redistribute it.

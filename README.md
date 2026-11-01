@@ -21,7 +21,7 @@ Open https://localhost:8443 and create your account.
 curl -fsSL https://raw.githubusercontent.com/mfat/ezVaultwarden/main/install.sh | sh
 ```
 
-It installs one binary to `~/.local/bin` without root, after checking it against
+It installs one binary to `~/.local/bin`, or `/usr/local/bin` for root, after checking it against
 the release's checksums. Rather not pipe to a shell? Download the binary and
 `checksums.txt` from [Releases](https://github.com/mfat/ezVaultwarden/releases),
 or read [install.sh](install.sh) first.
