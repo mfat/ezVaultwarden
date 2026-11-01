@@ -450,6 +450,9 @@ func (a *app) exposePublic(ctx context.Context, s config.State, args []string) e
 	if !s.SignupsClosed {
 		return errors.New("signups are still open, so anyone who reaches this could register. Finish with: ezvaultwarden init")
 	}
+	if err := a.confirmSwitch(s, "public", *assume); err != nil {
+		return err
+	}
 	host, err := a.preparePublic(ctx, *domain, *assume)
 	if errors.Is(err, errChooseAgain) {
 		return errors.New("nothing changed")

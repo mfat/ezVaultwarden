@@ -235,8 +235,8 @@ func TestSignupsCommand(t *testing.T) {
 }
 
 func TestExposePublicFromTailnet(t *testing.T) {
-	h, ts, _ := planSetup(t, "y\n")
-	if err := h.expose([]string{"tailnet"}); err != nil {
+	h, ts, _ := planSetup(t, "y\ny\n")
+	if err := h.expose([]string{"tailnet", "--yes"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.expose([]string{"public", "--domain", myDomain}); err != nil {
@@ -249,7 +249,7 @@ func TestExposePublicFromTailnet(t *testing.T) {
 }
 
 func TestPublicFailureGoesBack(t *testing.T) {
-	h, _, _ := planSetup(t, "y\n")
+	h, _, _ := planSetup(t, "y\ny\n")
 	h.reachable = func(context.Context, string) error { return errors.New("no certificate") }
 	if err := h.expose([]string{"public", "--domain", myDomain}); err == nil {
 		t.Fatal("expected an error")
@@ -392,5 +392,56 @@ func TestSayingNoToLeavingPublicChangesNothing(t *testing.T) {
 	}
 	if s, _ := h.load(); s.Mode != "public" || ts.served != "" {
 		t.Fatalf("%+v", s)
+	}
+}
+
+func TestEverySwitchSaysWhatChanges(t *testing.T) {
+	cases := []struct {
+		from, to string
+		args     []string
+		want     string
+	}{
+		{"local", "tailnet", []string{"tailnet"}, "Only devices running Tailscale"},
+		{"tailnet", "local", []string{"local"}, "lose access"},
+		{"public", "local", []string{"local"}, "stops working straight away"},
+		{"tailnet", "public", []string{"public", "--domain", myDomain}, "public internet"},
+	}
+	for _, tc := range cases {
+		h, _, _ := planSetup(t, "n\n")
+		s, _ := h.load()
+		s.Mode, s.Hostname = tc.from, box
+		if err := config.Save(h.paths, s); err != nil {
+			t.Fatal(err)
+		}
+		if err := h.expose(tc.args); err == nil {
+			t.Fatalf("%s to %s went ahead without a yes", tc.from, tc.to)
+		}
+		if !strings.Contains(h.output.String(), tc.want) {
+			t.Fatalf("%s to %s: %s", tc.from, tc.to, h.output)
+		}
+		if s, _ := h.load(); s.Mode != tc.from {
+			t.Fatalf("%s to %s changed the mode", tc.from, tc.to)
+		}
+	}
+}
+
+func TestGoingPublicDefaultsToNo(t *testing.T) {
+	h, _, _ := planSetup(t, "\n")
+	if err := h.expose(publicArgsFor(myDomain)); err == nil {
+		t.Fatal("pressing Enter went public")
+	}
+}
+
+func publicArgsFor(host string) []string { return []string{"public", "--domain", host} }
+
+func TestRepeatingAModeToRepairItDoesntAsk(t *testing.T) {
+	h, ts, _ := planSetup(t, "")
+	s, _ := h.load()
+	s.Mode, s.Hostname = "tailnet", box
+	if err := config.Save(h.paths, s); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.expose([]string{"tailnet"}); err != nil || ts.served == "" {
+		t.Fatalf("%v, served %q", err, ts.served)
 	}
 }

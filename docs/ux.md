@@ -156,6 +156,9 @@ with `--delete-data`, after you type `delete my vault`.
 
 ```text
 $ ezvaultwarden expose tailnet
+This changes how you reach your vault. Your account, passwords and backups stay.
+  Only devices running Tailscale will be able to connect.
+Continue? [Y/n] y
 ✓ Available to your devices at https://vault.tail1234.ts.net
   Not reachable from the public internet.
   Only devices running Tailscale can connect, so install it on each one.
@@ -163,6 +166,11 @@ $ ezvaultwarden expose tailnet
 ⚠ Apps set to the old address need the new one. See: ezvaultwarden connect
 
 $ ezvaultwarden expose public --domain vault.mydomain.com
+This changes how you reach your vault. Your account, passwords and backups stay.
+  https://vault.tail1234.ts.net stops working straight away.
+  Your login page will be on the public internet, so anyone can try to log in.
+  Use a strong master password and two-step login.
+Continue? [y/N] y
 ✓ Port 443 is free, and vault.mydomain.com points to this machine
 Continuing accepts Let's Encrypt's terms: https://letsencrypt.org/repository/
 Continue? [y/N] y

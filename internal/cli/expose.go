@@ -36,7 +36,7 @@ func (a *app) expose(args []string) error {
 	case "lan": // hidden for now, so the error below doesn't list it
 		return a.exposeLAN(ctx, s, args[1:])
 	case "local":
-		return a.exposeLocal(ctx, s)
+		return a.exposeLocal(ctx, s, args[1:])
 	}
 	return fmt.Errorf("unknown option %q. Choose tailnet, public or local", args[0])
 }
@@ -50,17 +50,8 @@ func (a *app) exposeTailnet(ctx context.Context, s config.State, args []string) 
 	if !s.SignupsClosed {
 		return errors.New("signups are still open, so anyone who reaches this could register. Finish with: ezvaultwarden init")
 	}
-	if s.Mode == "public" && !*assume {
-		fmt.Fprintln(a.out, "This moves your vault to Tailscale. Your account, passwords and backups stay.")
-		fmt.Fprintf(a.out, "  %s stops working straight away.\n", s.URL())
-		fmt.Fprintln(a.out, "  Only devices running Tailscale will be able to connect.")
-		yes, err := a.confirm("Continue?", true)
-		if err != nil {
-			return err
-		}
-		if !yes {
-			return errors.New("nothing changed")
-		}
+	if err := a.confirmSwitch(s, "tailnet", *assume); err != nil {
+		return err
 	}
 	host, err := a.startServing(ctx, fmt.Sprintf("http://127.0.0.1:%d", s.BackendPort))
 	if err != nil {
@@ -94,10 +85,52 @@ func (a *app) exposeTailnet(ctx context.Context, s config.State, args []string) 
 	return nil
 }
 
-func (a *app) exposeLocal(ctx context.Context, s config.State) error {
+// confirmSwitch says what's about to change before anything does. Every mode has
+// clients depending on its address, and going public can't be undone for anyone
+// who saw it, so it's the one that defaults to no. Repeating the current mode is
+// how a broken setup gets repaired, so that doesn't ask.
+func (a *app) confirmSwitch(s config.State, target string, assume bool) error {
+	if s.Mode == target {
+		return nil
+	}
+	fmt.Fprintln(a.out, "This changes how you reach your vault. Your account, passwords and backups stay.")
+	if s.Mode != "local" {
+		fmt.Fprintf(a.out, "  %s stops working straight away.\n", s.URL())
+	}
+	switch target {
+	case "tailnet":
+		fmt.Fprintln(a.out, "  Only devices running Tailscale will be able to connect.")
+	case "public":
+		fmt.Fprintln(a.out, "  Your login page will be on the public internet, so anyone can try to log in.")
+		fmt.Fprintln(a.out, "  Use a strong master password and two-step login.")
+	default:
+		fmt.Fprintln(a.out, "  Only this machine will be able to connect, so your phone and other devices will lose access.")
+	}
+	if assume {
+		return nil
+	}
+	yes, err := a.confirm("Continue?", target != "public")
+	if err != nil {
+		return err
+	}
+	if !yes {
+		return errors.New("nothing changed")
+	}
+	return nil
+}
+
+func (a *app) exposeLocal(ctx context.Context, s config.State, args []string) error {
+	fs := flag.NewFlagSet("expose local", flag.ContinueOnError)
+	assume := fs.Bool("yes", false, "don't ask for confirmation")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	if s.Mode == "local" {
 		a.ok("Already local at %s", s.URL())
 		return nil
+	}
+	if err := a.confirmSwitch(s, "local", *assume); err != nil {
+		return err
 	}
 	before := s
 	s.Mode, s.Hostname = "local", ""

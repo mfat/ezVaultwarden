@@ -179,7 +179,7 @@ func TestUnhealthyServerGoesBackFromLAN(t *testing.T) {
 
 func TestMovingFromTailnetToLANStopsTailscale(t *testing.T) {
 	h, ts, _ := lanSetup(t, "y\ntoken\n")
-	if err := h.expose([]string{"tailnet"}); err != nil {
+	if err := h.expose([]string{"tailnet", "--yes"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.expose(lanArgs()); err != nil {
@@ -195,7 +195,7 @@ func TestExposeLocalForgetsTheToken(t *testing.T) {
 	if err := h.expose(lanArgs()); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.expose([]string{"local"}); err != nil {
+	if err := h.expose([]string{"local", "--yes"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(h.paths.DNSToken()); !errors.Is(err, os.ErrNotExist) {
@@ -305,7 +305,7 @@ func TestLeavingLANRemovesTheRecordAndToken(t *testing.T) {
 		if err := h.expose(lanArgs()); err != nil {
 			t.Fatal(err)
 		}
-		if err := h.expose([]string{mode}); err != nil {
+		if err := h.expose([]string{mode, "--yes"}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := os.Stat(h.paths.DNSToken()); dns.removed != 1 || !errors.Is(err, os.ErrNotExist) {

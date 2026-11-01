@@ -61,7 +61,7 @@ func env(t *testing.T, h *harness) string {
 
 func TestExposeTailnetMovesTheVaultToItsTailnetName(t *testing.T) {
 	h, ts := exposeSetup(t)
-	if err := h.expose([]string{"tailnet"}); err != nil {
+	if err := h.expose([]string{"tailnet", "--yes"}); err != nil {
 		t.Fatal(err)
 	}
 	if ts.served != "http://127.0.0.1:18443" {
@@ -86,7 +86,7 @@ func TestExposeRefusesWhileSignupsAreOpen(t *testing.T) {
 	if err := config.Save(h.paths, s); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.expose([]string{"tailnet"}); err == nil || !strings.Contains(err.Error(), "signups") {
+	if err := h.expose([]string{"tailnet", "--yes"}); err == nil || !strings.Contains(err.Error(), "signups") {
 		t.Fatalf("got %v", err)
 	}
 	if ts.served != "" {
@@ -97,7 +97,7 @@ func TestExposeRefusesWhileSignupsAreOpen(t *testing.T) {
 func TestExposeLeavesSomeoneElsesServiceAlone(t *testing.T) {
 	h, ts := exposeSetup(t)
 	ts.current = "http://127.0.0.1:3000"
-	if err := h.expose([]string{"tailnet"}); err == nil || !strings.Contains(err.Error(), "already in use") {
+	if err := h.expose([]string{"tailnet", "--yes"}); err == nil || !strings.Contains(err.Error(), "already in use") {
 		t.Fatalf("got %v", err)
 	}
 	if ts.served != "" {
@@ -107,11 +107,11 @@ func TestExposeLeavesSomeoneElsesServiceAlone(t *testing.T) {
 
 func TestExposeTwiceIsFine(t *testing.T) {
 	h, ts := exposeSetup(t)
-	if err := h.expose([]string{"tailnet"}); err != nil {
+	if err := h.expose([]string{"tailnet", "--yes"}); err != nil {
 		t.Fatal(err)
 	}
 	ts.current = ts.served
-	if err := h.expose([]string{"tailnet"}); err != nil {
+	if err := h.expose([]string{"tailnet", "--yes"}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -119,7 +119,7 @@ func TestExposeTwiceIsFine(t *testing.T) {
 func TestFailedServeChangesNothing(t *testing.T) {
 	h, ts := exposeSetup(t)
 	ts.serveErr = errors.New("denied")
-	if err := h.expose([]string{"tailnet"}); err == nil {
+	if err := h.expose([]string{"tailnet", "--yes"}); err == nil {
 		t.Fatal("expected an error")
 	}
 	if s, _ := h.load(); s.Mode != "local" {
@@ -135,7 +135,7 @@ func TestUnhealthyServerGoesBackToLocal(t *testing.T) {
 		}
 		return nil
 	}
-	if err := h.expose([]string{"tailnet"}); err == nil {
+	if err := h.expose([]string{"tailnet", "--yes"}); err == nil {
 		t.Fatal("expected an error")
 	}
 	s, _ := h.load()
@@ -149,10 +149,10 @@ func TestUnhealthyServerGoesBackToLocal(t *testing.T) {
 
 func TestExposeLocalUndoesTailnet(t *testing.T) {
 	h, ts := exposeSetup(t)
-	if err := h.expose([]string{"tailnet"}); err != nil {
+	if err := h.expose([]string{"tailnet", "--yes"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.expose([]string{"local"}); err != nil {
+	if err := h.expose([]string{"local", "--yes"}); err != nil {
 		t.Fatal(err)
 	}
 	s, _ := h.load()
@@ -163,7 +163,7 @@ func TestExposeLocalUndoesTailnet(t *testing.T) {
 
 func TestUninstallStopsServingOverTailscale(t *testing.T) {
 	h, ts := exposeSetup(t)
-	if err := h.expose([]string{"tailnet"}); err != nil {
+	if err := h.expose([]string{"tailnet", "--yes"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.uninstall(nil); err != nil {
@@ -176,7 +176,7 @@ func TestUninstallStopsServingOverTailscale(t *testing.T) {
 
 func TestStatusNoticesTailscaleNoLongerServes(t *testing.T) {
 	h, ts := exposeSetup(t)
-	if err := h.expose([]string{"tailnet"}); err != nil {
+	if err := h.expose([]string{"tailnet", "--yes"}); err != nil {
 		t.Fatal(err)
 	}
 	h.output.Reset()
@@ -191,7 +191,7 @@ func TestStatusNoticesTailscaleNoLongerServes(t *testing.T) {
 
 func TestConnectDropsLocalCertificateStepsOnATailnet(t *testing.T) {
 	h, _ := exposeSetup(t)
-	if err := h.expose([]string{"tailnet"}); err != nil {
+	if err := h.expose([]string{"tailnet", "--yes"}); err != nil {
 		t.Fatal(err)
 	}
 	h.output.Reset()
