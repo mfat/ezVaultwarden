@@ -14,11 +14,14 @@ page, and clean removal. See [test/e2e](../test/e2e/README.md).
 signups, the "Saved it?" prompt, the web vault in Firefox after accepting the warning,
 and a browser extension logging in.
 
+**Proven on a clean Ubuntu 24.04 VPS:** the end-to-end tests with fresh downloads, the
+setup menu, signups closing, the safety refusals, and the vault returning after a reboot
+with nobody logged in.
+
 **Not proven yet:**
 
 - Importing the certificate into Linux browsers
 - The desktop app logging in
-- Surviving a reboot
 - `expose local` from `tailnet` on a real machine, and a phone's Bitwarden app
 - `expose lan` reaching the vault from another device. On a real domain it issued a
   Let's Encrypt certificate and set the DNS record, but that network blocked the name
@@ -28,8 +31,8 @@ and a browser extension logging in.
 
 ## Next
 
-1. **Finish testing on a real Linux machine.** Reboot, desktop app and certificate
-   import are skipped for now. This needs a person, and may reorder what follows.
+1. **Finish testing on a real Linux machine.** The desktop app and certificate import
+   are skipped for now. This needs a person, and may reorder what follows.
 2. **`init --from-backup`.** Restoring on a new machine works around `init` today:
    untested, undocumented, and signups stay open until the last step. Disaster
    recovery is why backups exist.

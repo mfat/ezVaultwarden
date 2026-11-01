@@ -20,13 +20,13 @@ Linux checks below are done.
 It was developed on Windows and tested in WSL. A first run on a real Linux machine
 worked: install, a browser signup closing signups, the "Saved it?" prompt, the web
 vault in Firefox after accepting the warning, and a browser extension logging in.
-That run used v0.2.0, which still had the system certificate step.
+That run used v0.2.0, which still had the system certificate step. Later, a clean
+Ubuntu 24.04 VPS passed the end-to-end tests, the setup menu and a reboot.
 
 ## Next steps, in order
 
 1. **Finish the real Linux checks.** The maintainer skipped these for now, so they're
    still unproven. Use throwaway data:
-   - a reboot: does the vault come back by itself?
    - the desktop app logging in
    - importing the certificate by hand, and whether browsers then trust the page
 2. **`init --from-backup`.** Restoring on a new machine is untested and undocumented.
