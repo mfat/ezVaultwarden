@@ -2,7 +2,7 @@
 
 ## Where it stands
 
-v0.3.3 runs Vaultwarden on Linux, reachable from that machine only, over Tailscale, or
+v0.3.4 runs Vaultwarden on Linux, reachable from that machine only, over Tailscale, or
 on the public internet with your own domain, with backups, updates and rollback. It's early: the README warns against real passwords until the
 first items below are done.
 
