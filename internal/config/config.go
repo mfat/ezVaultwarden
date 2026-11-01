@@ -84,14 +84,17 @@ type Previous struct {
 
 // URL is the address clients use.
 func (s State) URL() string {
-	switch s.Mode {
-	case "tailnet":
+	switch {
+	case s.Mode == "tailnet":
 		return "https://" + s.Hostname
-	case "lan":
+	case s.HasDomain():
 		return fmt.Sprintf("https://%s:%d", s.Hostname, s.Port)
 	}
 	return s.LocalURL()
 }
+
+// HasDomain reports whether the vault uses the user's own domain and certificate.
+func (s State) HasDomain() bool { return s.Mode == "lan" || s.Mode == "public" }
 
 // LocalURL is Caddy on this machine, which answers in every mode.
 func (s State) LocalURL() string { return fmt.Sprintf("https://localhost:%d", s.Port) }
@@ -160,10 +163,10 @@ func VaultwardenEnv(p Paths, s State) string {
 }
 
 // Caddyfile renders the TLS front end. The localhost site stays in every mode,
-// because health checks use it. Only lan mode listens beyond this machine.
+// because health checks use it. Only the domain modes listen beyond this machine.
 func Caddyfile(p Paths, s State) string {
 	bind, lan := "\tbind 127.0.0.1\n", ""
-	if s.Mode == "lan" {
+	if s.HasDomain() {
 		bind = ""
 		lan = fmt.Sprintf(`
 https://%s:%d {

@@ -17,13 +17,8 @@ import (
 // Accounts returns the registered email addresses. A vault that has not
 // created its database yet simply has none.
 func Accounts(dataDir string) ([]string, error) {
-	dbPath := filepath.Join(dataDir, "db.sqlite3")
-	if _, err := os.Stat(dbPath); errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
-	dsn := (&url.URL{Scheme: "file", Path: dbPath, RawQuery: "mode=ro&_pragma=busy_timeout(2000)"}).String()
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
+	db, err := open(dataDir)
+	if db == nil || err != nil {
 		return nil, err
 	}
 	defer db.Close()
@@ -41,4 +36,32 @@ func Accounts(dataDir string) ([]string, error) {
 		emails = append(emails, email)
 	}
 	return emails, rows.Err()
+}
+
+// HasTwoStepLogin reports whether every account has a second login step. The
+// types are authenticator app, email, Duo, YubiKey, U2F and WebAuthn. The table
+// also holds temporary challenges, which must not count.
+func HasTwoStepLogin(dataDir string) (bool, error) {
+	db, err := open(dataDir)
+	if db == nil || err != nil {
+		return false, err
+	}
+	defer db.Close()
+	var without int
+	err = db.QueryRow(`SELECT COUNT(*) FROM users WHERE uuid NOT IN
+		(SELECT user_uuid FROM twofactor WHERE enabled = 1 AND atype IN (0, 1, 2, 3, 4, 7))`).Scan(&without)
+	if err != nil {
+		return false, fmt.Errorf("reading two-step login: %w", err)
+	}
+	return without == 0, nil
+}
+
+// open returns nil if the vault has not created its database yet.
+func open(dataDir string) (*sql.DB, error) {
+	dbPath := filepath.Join(dataDir, "db.sqlite3")
+	if _, err := os.Stat(dbPath); errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	dsn := (&url.URL{Scheme: "file", Path: dbPath, RawQuery: "mode=ro&_pragma=busy_timeout(2000)"}).String()
+	return sql.Open("sqlite", dsn)
 }

@@ -127,7 +127,7 @@ Press Enter here to close it.
 `uninstall` stops everything and removes the services. It only deletes vault data
 with `--delete-data`, after you type `delete my vault`.
 
-## Going remote *(planned)*
+## Going remote
 
 Every step up in exposure is a deliberate choice, and tells you what changes.
 
@@ -138,14 +138,10 @@ $ ezvaultwarden expose tailnet
 
 $ ezvaultwarden expose public --domain vault.example.com
 
-This makes your vault login page reachable by anyone.
+  ✓ Two-step login is on
+  ✗ Backups are only on this server. Add a place with: ezvaultwarden backup --target /path
 
-  ✓ Domain points to this machine
-  ✓ Ports 80 and 443 reachable
-  ✗ 2FA is not enabled on your account
-  ✗ No backup outside this disk
-
-Fix these first, or re-run with --accept-risk.
+✗ fix these first, or re-run with --accept-risk
 ```
 
 ## Real certificates

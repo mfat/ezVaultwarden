@@ -239,6 +239,10 @@ func (a *app) probe(ctx context.Context, s config.State) error {
 }
 
 func (a *app) finish(ctx context.Context, s config.State, f initFlags) error {
+	s, planPublic, err := a.chooseAccess(ctx, s, f)
+	if err != nil {
+		return err
+	}
 	email, err := a.waitForAccount(ctx, s)
 	if err != nil {
 		return err
@@ -261,13 +265,18 @@ func (a *app) finish(ctx context.Context, s config.State, f initFlags) error {
 	if err := a.showRecoveryKit(s, email, f); err != nil {
 		return err
 	}
+	if planPublic {
+		a.showPublicSteps()
+	}
 	fmt.Fprintln(a.out, "\nConnect a client:   ezvaultwarden connect")
 	return nil
 }
 
 func (a *app) waitForAccount(ctx context.Context, s config.State) (string, error) {
 	fmt.Fprintf(a.out, "\nOpen %s and create your account.\n", s.URL())
-	fmt.Fprintf(a.out, "Your browser will warn you until you import %s into its certificate settings.\n", a.paths.RootCert())
+	if s.Mode == "local" {
+		fmt.Fprintf(a.out, "Your browser will warn you until you import %s into its certificate settings.\n", a.paths.RootCert())
+	}
 	fmt.Fprintln(a.out, "Waiting for your account...")
 	for {
 		emails, err := vault.Accounts(a.paths.Data())

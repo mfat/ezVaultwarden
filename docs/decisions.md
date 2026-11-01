@@ -79,6 +79,13 @@ loopback redirect and a DNS scope to be confirmed, has no device flow for headle
 machines, and reaches every domain in the account rather than one, so the token would
 stay as the fallback. DNS-PERSIST-01 would be better still once Let's Encrypt offers it.
 
+## Public access only with a public address
+
+`expose public` listens on the internet, so it's offered only when the machine holds a
+public address itself. We can't tell whether an address is static, or see a mapped one
+on clouds like AWS and Oracle, so those machines get the home menu, and can still run
+`expose public --accept-risk` by hand. `expose lan` refuses on a public address.
+
 ## Backups encrypted to a public key
 
 The first design used a word passphrase. That would have meant storing a secret on

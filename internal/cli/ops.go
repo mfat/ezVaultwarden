@@ -44,6 +44,8 @@ func (a *app) connect([]string) error {
 		fmt.Fprintln(a.out, "  Install Tailscale and Bitwarden, log in to Tailscale, then paste the URL above")
 	case "lan":
 		fmt.Fprintln(a.out, "  Join the same network, install Bitwarden, then paste the URL above")
+	case "public":
+		fmt.Fprintln(a.out, "  Install Bitwarden, then paste the URL above")
 	default:
 		fmt.Fprintln(a.out, "  Not reachable in local mode. Try: ezvaultwarden expose tailnet")
 	}

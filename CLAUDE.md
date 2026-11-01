@@ -50,10 +50,10 @@ step is a small addition worth making alongside item 2.
   backup or restore code. They're slow the first time and install real services.
 - **Don't run the end-to-end tests on a machine with a real install.** They refuse to,
   because `uninstall` would remove its services. Use a VM.
-- Before a release, run them with `--no-cache` once. The cached ported `upgrade` suite
-  and the cache itself have never completed a run, so expect to fix small things.
-- A new Vaultwarden needs a new release: update the pins in `internal/fetch/pins.go`,
-  and bump `OLD_VAULTWARDEN` in `test/e2e/e2e.py` if needed.
+- Before a release, run them with `--no-cache` once.
+- The `upgrade` suite is off because it takes too long. Don't run or re-enable it unless
+  the maintainer asks.
+- A new Vaultwarden needs a new release: update the pins in `internal/fetch/pins.go`.
 - Releases come from pushing a `v*` tag. Never mark one a prerelease, because the
   `latest/download` links `install.sh` uses skip those.
 

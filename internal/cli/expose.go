@@ -20,7 +20,7 @@ type tailnet interface {
 
 func (a *app) expose(args []string) error {
 	if len(args) == 0 {
-		return errors.New("choose a mode: ezvaultwarden expose tailnet|lan|local")
+		return errors.New("choose a mode: ezvaultwarden expose tailnet|lan|public|local")
 	}
 	s, err := a.load()
 	if err != nil {
@@ -29,17 +29,19 @@ func (a *app) expose(args []string) error {
 	ctx := context.Background()
 	switch args[0] {
 	case "tailnet":
-		return a.exposeTailnet(ctx, s)
-	case "lan":
-		return a.exposeLAN(ctx, s, args[1:])
+		return a.exposeTailnet(ctx, s, false)
+	case "lan", "public":
+		return a.exposeDomain(ctx, s, args[0], args[1:], false)
 	case "local":
 		return a.exposeLocal(ctx, s)
 	}
-	return fmt.Errorf("unknown mode %q. Choose tailnet, lan or local", args[0])
+	return fmt.Errorf("unknown mode %q. Choose tailnet, lan, public or local", args[0])
 }
 
-func (a *app) exposeTailnet(ctx context.Context, s config.State) error {
-	if !s.SignupsClosed {
+// exposeTailnet can run during setup with signups open, because only the user's
+// own devices can reach it. That's how a server with no screen gets its account.
+func (a *app) exposeTailnet(ctx context.Context, s config.State, setup bool) error {
+	if !s.SignupsClosed && !setup {
 		return errors.New("signups are still open, so anyone who reaches this could register. Finish with: ezvaultwarden init")
 	}
 	host, err := a.ts.Lookup(ctx)
@@ -68,7 +70,7 @@ func (a *app) exposeTailnet(ctx context.Context, s config.State) error {
 		}
 		return err
 	}
-	if before.Mode == "lan" {
+	if before.HasDomain() {
 		a.dropDNS(ctx, before)
 	}
 	if err := a.reachable(ctx, s.URL()); err != nil {
@@ -79,7 +81,9 @@ func (a *app) exposeTailnet(ctx context.Context, s config.State) error {
 	}
 	fmt.Fprintln(a.out, "  Not reachable from the public internet.")
 	fmt.Fprintln(a.out, "  This machine's name is now in public certificate logs.")
-	a.warn("Apps set to the old address need the new one. See: ezvaultwarden connect")
+	if !setup {
+		a.warn("Apps set to the old address need the new one. See: ezvaultwarden connect")
+	}
 	return nil
 }
 

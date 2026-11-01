@@ -33,7 +33,7 @@ const usage = `ezVaultwarden: run your own Vaultwarden.
   init        Set everything up
   status      Show what's running
   connect     Show how to connect apps and the bw CLI
-  expose      Choose who can reach it: tailnet, lan or local
+  expose      Choose who can reach it: tailnet, lan, public or local
   start       Start the server
   stop        Stop the server
   backup      Make an encrypted backup now
@@ -274,6 +274,18 @@ func (a *app) report(s config.State) statusReport {
 	return r
 }
 
+func reach(mode string) string {
+	switch mode {
+	case "tailnet":
+		return "your devices only"
+	case "lan":
+		return "your network only"
+	case "public":
+		return "⚠ public internet"
+	}
+	return "this machine only"
+}
+
 func (a *app) status(args []string) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "machine-readable output")
@@ -294,7 +306,7 @@ func (a *app) status(args []string) error {
 	if !r.Running {
 		state = "○ Stopped"
 	}
-	fmt.Fprintf(a.out, "%s  %s  (%s only)\n", state, r.URL, r.Mode)
+	fmt.Fprintf(a.out, "%s  %s  (%s)\n", state, r.URL, reach(s.Mode))
 	fmt.Fprintf(a.out, "  Version   Vaultwarden %s\n", r.Version)
 	if r.Backups == 0 {
 		fmt.Fprintln(a.out, "  Backups   None yet, the first runs tonight")
@@ -324,7 +336,7 @@ func (a *app) status(args []string) error {
 	if problem := a.certProblem(s); problem != "" {
 		a.warn("%s", problem)
 	}
-	if s.Mode == "lan" && !a.nameWorks(s.Hostname) {
+	if s.HasDomain() && !a.nameWorks(s.Hostname) {
 		a.warnName(s.Hostname)
 	}
 	for _, problem := range overrides {

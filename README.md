@@ -49,7 +49,7 @@ Then run `ezvaultwarden init`.
 | Docker and Podman | Planned |
 | `tailnet` mode | In progress |
 | `lan` mode, with Let's Encrypt over Cloudflare DNS | In progress |
-| `public` mode with Let's Encrypt | Planned |
+| `public` mode, on machines with a public address | In progress |
 | Local web dashboard | Planned |
 
 ## Commands

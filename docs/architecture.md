@@ -93,8 +93,13 @@ complete, so finding one is proof it was verified.
 
 `init` checks ports and systemd, downloads, writes config, installs the services,
 and waits until Caddy answers over TLS with a certificate from our own CA. It then
-waits for the first account by reading the database, closes signups, restarts, and
-shows the recovery kit. If interrupted, rerunning it resumes.
+asks how the user wants to reach the vault, and sets that up. This comes before the
+account, because a machine with no screen can't open `localhost`. It waits for the
+first account by reading the database, closes signups, restarts, and shows the recovery
+kit. If interrupted, rerunning it resumes. `--yes` skips the menu and stays local.
+
+`expose public` needs an account with two-step login, so choosing it in the menu only
+creates the account through an SSH tunnel, then lists the remaining steps.
 
 ## Backups
 
