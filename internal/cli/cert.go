@@ -183,13 +183,31 @@ func (a *app) pointDNS(ctx context.Context, s config.State) {
 	if ip != "" {
 		err := a.syncDNS(ctx, s, ip)
 		if err == nil {
-			a.ok("%s points to this machine, %s", s.Hostname, ip)
+			a.ok("Cloudflare now points %s to this machine, %s", s.Hostname, ip)
+			if !a.nameWorks(s.Hostname) {
+				a.warnName(s.Hostname)
+			}
 			return
 		}
 		a.warn("Couldn't set the DNS record: %v", err)
 	}
 	fmt.Fprintln(a.out, "  In Cloudflare, add a DNS-only record:")
 	fmt.Fprintf(a.out, "  A  %s  %s\n", s.Hostname, ip)
+}
+
+// nameWorks asks the way a client on this network would. Cloudflare holding the
+// record proves nothing here: many routers drop public answers that hold a private
+// address, as protection against DNS rebinding.
+func (a *app) nameWorks(host string) bool {
+	found, err := a.lookup(host)
+	return err == nil && len(found) > 0
+}
+
+func (a *app) warnName(host string) {
+	a.warn("This network can't look up %s, so devices here can't reach the vault by name.", host)
+	fmt.Fprintln(a.out, "  A new name can take up to 30 minutes. If it stays like this, your router is")
+	fmt.Fprintln(a.out, "  probably blocking it: turn off DNS rebinding protection, or add the name to")
+	fmt.Fprintln(a.out, "  its local DNS. To go back instead, run: ezvaultwarden expose tailnet")
 }
 
 // openBrowser is a convenience: the link is printed too, for machines without one.

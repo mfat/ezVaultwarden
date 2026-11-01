@@ -53,6 +53,7 @@ func lanSetupDNS(t *testing.T, input string) (*harness, *fakeTailnet, *fakeDNS, 
 		return dns
 	}
 	h.openLink = func(string) { dns.opened++ }
+	h.lookup = func(string) ([]string, error) { return []string{"192.168.1.20"}, nil }
 	issued := new(int)
 	h.issue = func(_ context.Context, host string) error {
 		*issued++
@@ -265,6 +266,27 @@ func TestExposeLANSetsTheDNSRecord(t *testing.T) {
 	}
 	if outboundIP() != "" && (len(dns.points) != 1 || !strings.HasPrefix(dns.points[0], domain+"=")) {
 		t.Fatalf("points: %v", dns.points)
+	}
+}
+
+func TestABlockedNameIsReportedInsteadOfCelebrated(t *testing.T) {
+	if outboundIP() == "" {
+		t.Skip("no network")
+	}
+	h, _, _, _ := lanSetupDNS(t, "y\ntoken\n")
+	h.lookup = func(string) ([]string, error) { return nil, errors.New("no such host") }
+	if err := h.expose(lanArgs()); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(h.output.String(), "can't look up") {
+		t.Fatalf("no warning: %s", h.output)
+	}
+	h.output.Reset()
+	if err := h.status(nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(h.output.String(), "rebinding") {
+		t.Fatalf("status stayed quiet: %s", h.output)
 	}
 }
 

@@ -59,6 +59,9 @@ step is a small addition worth making alongside item 2.
 ## Things that bit us
 
 - `lego` 5 has no `renew` command. `run` does both.
+- Routers can drop public DNS answers holding a private address, so a correct record
+  can still fail in `lan` mode. `192.168.1.1.nip.io` is a quick test. Asking for a name
+  before its record exists also caches NXDOMAIN for up to 30 minutes.
 - Some networks intercept all DNS, so `lego`'s own record check fails with NXDOMAIN.
   An answer from `dig @192.0.2.1` proves it. Hence the fixed wait.
 - `bw` refuses plain HTTP, even on localhost.

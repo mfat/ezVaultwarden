@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -60,6 +61,7 @@ type app struct {
 	issue     func(ctx context.Context, host string) error
 	dns       func(token string) dnsHost
 	openLink  func(url string)
+	lookup    func(host string) ([]string, error)
 }
 
 // Run executes one command and returns the process exit code.
@@ -83,6 +85,7 @@ func Run(args []string) int {
 	a.issue = a.issueCert
 	a.dns = func(token string) dnsHost { return cloudflare.New(token) }
 	a.openLink = openBrowser
+	a.lookup = net.LookupHost
 	if len(args) == 0 {
 		fmt.Fprint(a.out, usage)
 		return 0
@@ -318,6 +321,9 @@ func (a *app) status(args []string) error {
 	}
 	if problem := a.certProblem(s); problem != "" {
 		a.warn("%s", problem)
+	}
+	if s.Mode == "lan" && !a.nameWorks(s.Hostname) {
+		a.warnName(s.Hostname)
 	}
 	for _, problem := range overrides {
 		a.warn("%s", problem)

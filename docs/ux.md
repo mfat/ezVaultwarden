@@ -165,7 +165,7 @@ set Zone Resources to the one that holds vault.example.com. Paste the token here
 Cloudflare API token:
 ✓ Certificate issued for vault.example.com, renews automatically
 ✓ Available on your network at https://vault.example.com:8443
-✓ vault.example.com points to this machine, 192.168.1.20
+✓ Cloudflare now points vault.example.com to this machine, 192.168.1.20
 ```
 
 ## What can't be fully smooth
