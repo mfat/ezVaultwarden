@@ -59,6 +59,8 @@ step is a small addition worth making alongside item 2.
 ## Things that bit us
 
 - `lego` 5 has no `renew` command. `run` does both.
+- Some networks intercept all DNS, so `lego`'s own record check fails with NXDOMAIN.
+  An answer from `dig @192.0.2.1` proves it. Hence the fixed wait.
 - `bw` refuses plain HTTP, even on localhost.
 - `bw` keeps its cached vault after a restore or rollback. Test with a fresh login.
 - `bw` 2026.10.1 can't log in to Vaultwarden 1.37.3. New clients can break old servers.

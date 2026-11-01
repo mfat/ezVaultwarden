@@ -225,13 +225,20 @@ func (a *app) issueCert(ctx context.Context, host string) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, lego, "run", "--accept-tos", "--dns", "cloudflare",
-		"--domains", host, "--path", a.paths.Lego(), "--log.format", "text")
+	cmd := exec.CommandContext(ctx, lego, legoArgs(host, a.paths.Lego())...)
 	cmd.Env = append(os.Environ(), "CLOUDFLARE_DNS_API_TOKEN_FILE="+a.paths.DNSToken())
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("the certificate request failed: %w\n%s", err, lastLines(out, 5))
 	}
 	return nil
+}
+
+// legoArgs waits a fixed time instead of letting lego look for the record itself.
+// Networks that intercept DNS answer that lookup with a stale "no such name", so it
+// could never succeed. Let's Encrypt checks from outside, and Cloudflare is quick.
+func legoArgs(host, path string) []string {
+	return []string{"run", "--accept-tos", "--dns", "cloudflare", "--dns.propagation.wait", "30s",
+		"--domains", host, "--path", path, "--log.format", "text"}
 }
 
 func lastLines(out []byte, n int) string {

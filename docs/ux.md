@@ -179,7 +179,8 @@ Cloudflare API token:
   Tailscale admin console, plus one `sudo tailscale set --operator=$USER`. It names
   each step when it's missing. The machine's name ends up in public certificate logs.
 - **Firewalls and routers for `lan`.** The user may need to allow the port. Some routers
-  also block public DNS answers holding a private address, as rebinding protection.
+  and networks also block public DNS answers holding a private address, as rebinding
+  protection, and some intercept all DNS.
 - **The Cloudflare token.** Creating one takes a logged-in person. See decisions.
 - **`curl | sh`.** Convenient, but some people won't like it, so manual download
   stays documented.

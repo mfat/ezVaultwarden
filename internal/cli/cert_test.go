@@ -344,3 +344,10 @@ func TestStatusWarnsWhenRenewalIsFailing(t *testing.T) {
 		t.Fatalf("got %q", p)
 	}
 }
+
+func TestCertificatesDontDependOnLocalDNS(t *testing.T) {
+	args := strings.Join(legoArgs(domain, "/data"), " ")
+	if !strings.Contains(args, "--dns.propagation.wait 30s") {
+		t.Fatalf("a network that intercepts DNS would break this: %s", args)
+	}
+}
