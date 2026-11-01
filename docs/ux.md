@@ -18,19 +18,44 @@ real output may differ slightly from these examples.
 $ curl -fsSL https://raw.githubusercontent.com/mfat/ezVaultwarden/main/install.sh | sh
 $ ezvaultwarden init
 
+Welcome to ezVaultwarden. This wizard will walk you through setting up your own Vaultwarden instance.
+
+Before install, please tell me how you want to access your vault:
+
+1. This computer only
+Vaultwarden will be installed on this computer, and it will NOT be accessible from the internet or your local Network.
+Note: Uses a self-signed certificate you should accept in your browser
+
+2. Network access via Tailscale
+Vaultwarden will be accessible from the internet only by your own devices running Tailscale.
+*Requires free Tailscale account
+
+3. Public internet access
+Vaultwarden will be available from the public internet using your own domain name. (for example vault.mydomain.com).
+*Requires a server accessible from the internet on port 443 and a domain name
+
+Choose 1, 2 or 3: 2
+
+  Checking this machine...
+✓ 11 GB of disk and 960 MB of memory free, ports are ready
+✓ Tailscale is connected as mybox.tail1234.ts.net
+
+ezVaultwarden v0.3.0
+
 ✓ linux/amd64, running natively
 ✓ Vaultwarden 1.37.4, web vault and Caddy 2.11.7 downloaded and verified
-✓ Service started at https://localhost:8443
+✓ Service started
+✓ Available to your devices at https://mybox.tail1234.ts.net
 
-Open https://localhost:8443 and create your account.
-Your browser will warn you until you import ~/.local/share/ezvaultwarden/caddy/pki/authorities/local/root.crt into its certificate settings.
+Open https://mybox.tail1234.ts.net and create your account.
+Only your own devices can reach this.
 Waiting for your account...
 ✓ Account created: mehdi@example.com
 ✓ Signups closed, nobody else can register
 ```
 
-Signups closing by itself is the heart of it: no window for a stranger to register,
-and no setting to remember.
+Signups closing by itself is the heart of it: no setting to remember. On public access
+there is a short window before the first account, so the wizard says so plainly.
 
 Then the recovery kit, shown once:
 

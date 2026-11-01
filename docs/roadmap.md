@@ -15,17 +15,19 @@ signups, the "Saved it?" prompt, the web vault in Firefox after accepting the wa
 and a browser extension logging in.
 
 **Proven on a clean Ubuntu 24.04 VPS:** the end-to-end tests with fresh downloads, the
-setup menu, signups closing, the safety refusals, and the vault returning after a reboot
-with nobody logged in.
+setup wizard's public path, a real Let's Encrypt certificate over port 443 alone, `signups
+close`, a stranger refused once signups closed, `expose local` taking it off the internet,
+and the vault returning after a reboot with nobody logged in.
 
 **Not proven yet:**
 
 - Importing the certificate into Linux browsers
 - The desktop app logging in
 - `expose local` from `tailnet` on a real machine, and a phone's Bitwarden app
-- `expose lan` reaching the vault from another device. On a real domain it issued a
-  Let's Encrypt certificate and set the DNS record, but that network blocked the name
-- A real renewal. `lego` 5's renewal behaviour is from its docs
+- The wizard's Tailscale path on a fresh install, and the menu in a real terminal
+- `init` resuming after `signups close` with no account yet
+- A public certificate renewing, and clients logging in to a public vault
+- `expose lan` reaching the vault from another device. It's hidden from users for now
 - Self-update from a real GitHub release. The first test is v0.2.0 to the next one
 - The `arm64` build, which has been built but never run
 
