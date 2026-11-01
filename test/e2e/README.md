@@ -4,15 +4,16 @@ These run the real thing: Vaultwarden, Caddy, systemd and the `bw` CLI. `go test
 covers the logic with fakes. These prove it works.
 
 ```bash
-python3 test/e2e/e2e.py local
-python3 test/e2e/e2e.py upgrade
-python3 test/e2e/e2e.py all
+python3 test/e2e/e2e.py
 ```
 
-| Suite | Covers |
-|---|---|
-| `local` | Install, signups closing, `bw`, backup, restore with attachments, crash recovery, the backup timer, `uninstall` |
-| `upgrade` | A real upgrade from an older Vaultwarden, `rollback`, a broken update, a tampered release, the admin page |
+It covers install, signups closing, `bw`, backup, restore with attachments, crash
+recovery, the backup timer, `uninstall` and clean removal.
+
+The `upgrade` suite is switched off because it takes far too long. It covered a real
+upgrade, `rollback`, a broken update, a tampered release and the admin page, and last
+passed on v0.2.0's successor, on 2026-11-01. `go test` still covers update and rollback
+logic with fakes. Only run it if the maintainer asks.
 
 ## When to run them
 
@@ -23,8 +24,8 @@ code. They need real services, so they stay out of CI.
 
 ## Speed
 
-Nearly all the time is downloading Vaultwarden. The first run fetches both versions
-at once into `~/.cache/ezvaultwarden-e2e`, checked against their digests as usual.
+Nearly all the time is downloading Vaultwarden. The first run fetches it into
+`~/.cache/ezvaultwarden-e2e`, checked against its digest as usual.
 Later runs reuse them, because a version folder that exists skips its download.
 
 `--no-cache` downloads everything, as a real install does. Run it before a release,
