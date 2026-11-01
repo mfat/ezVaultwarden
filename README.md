@@ -119,6 +119,14 @@ documents extracting its static binaries this way.
 Vaultwarden listens on loopback only. Caddy handles TLS in front of it, using
 its own local certificate authority in `local` mode.
 
+## Docs
+
+- [Architecture](docs/architecture.md): how it works
+- [Decisions](docs/decisions.md): why it's built this way
+- [Roadmap](docs/roadmap.md): what's proven, what's next
+- [User experience](docs/ux.md): how it should feel to use
+- [End-to-end tests](test/e2e/README.md)
+
 ## Building
 
 ```bash

@@ -1,0 +1,115 @@
+# Decisions
+
+Why it's built this way. Each entry says what would make us change our mind.
+
+## Native binaries by default, containers as an option
+
+The point of the tool is no prerequisites, so on Linux it runs static binaries as
+systemd user services. There's no daemon, no root, and nothing to install first.
+
+Containers still win on isolation, easy rollback, and Mac and Windows support, so
+Docker and Podman are planned behind the same `Runtime` interface. For `public` mode
+we should recommend Podman where it's available, because isolation matters most there.
+
+Docker can also publish ports past UFW and firewalld, which is a real trap for a
+password server.
+
+## Extract the binary from the official image
+
+Vaultwarden publishes no binaries, and its wiki documents extracting them from the
+Alpine images. We do that over the registry API, so no container runtime is needed.
+The risk is a change in the image layout. Pinning a tested digest per release limits
+it to a failed test before release, not a break for users.
+
+Distro packages exist too. A `package` runtime is a possible later addition.
+
+## One image for the server and web vault
+
+The image contains a web vault the Vaultwarden project built to match. Pinning one
+digest is simpler than pairing it with the separate `bw_web_builds` release, and
+guarantees a tested pair.
+
+## Go, not Python
+
+With Docker gone, the appeal is one download that just runs. A static Go binary
+keeps that. Python would add its own install step on the machines this is meant to
+make easy. The original plan was Python, for sshPilot's stack. This changed once the
+tool stopped being a thin wrapper around Compose.
+
+## Caddy for TLS
+
+We never write certificate code. Caddy provides a local CA now and ACME later, and
+is the one thing that changes between access modes. Vaultwarden's own TLS worked in
+testing, but a proxy is the better long-running setup.
+
+`bw` refuses plain HTTP, even on localhost, so TLS isn't optional in `local` mode.
+
+## Backups encrypted to a public key
+
+The first design used a word passphrase. That would have meant storing a secret on
+the server for the daily timer, or asking a person every night. With a public key
+the server can make backups it can't read. The cost is a long `AGE-SECRET-KEY-...`
+string, which is fine for a recovery kit.
+
+## Rollback needs a plain copy of the data
+
+Automatic rollback can't use the encrypted backups, because the server deliberately
+can't open them. So `update` also keeps `data.before-update`. It's no more exposed
+than the live `data/` folder beside it.
+
+## Binaries and data roll back together
+
+A newer Vaultwarden may migrate the database so the older one can't read it. Rolling
+back only the binary could fail, or worse. The price is that changes since the update
+leave the vault, so they're set aside in `data.replaced-*` and never deleted.
+
+## Versions are compiled in
+
+A release is a tested combination, so the program pins exact digests. This is why
+`update` must replace the program first. It means a new Vaultwarden needs a new
+ezVaultwarden release, which keeps "what we tested" and "what users run" identical.
+
+## A version folder existing is proof it was verified
+
+A folder under `versions/` only appears by rename once complete, so `update` trusts
+it. This also let the tests plant a broken version without any test-only hooks.
+
+## Signups close by watching the database
+
+There's no setting for "first account only", so `init` reads the `users` table and
+restarts with signups off. Reading SQLite needs `modernc.org/sqlite`, which adds
+weight to the binary, but it's far simpler than driving the admin API.
+
+## The admin page stays off
+
+A page that doesn't exist can't be attacked. It opens on request with a one-time
+password, stored only as an Argon2id hash, and closes when you're done.
+
+## `config.json` is detected, not fought
+
+Settings saved in the admin page beat the environment, so ezVaultwarden can be
+overridden silently. We warn in `status` instead of rewriting a file Vaultwarden
+owns. If people get caught by this, we could offer to fix it.
+
+## A master password can't be reset
+
+This is how end-to-end encryption works, and it's the same on Bitwarden's service.
+Backups don't help, because they hold the same encrypted data. So the design centres
+on prevention: the recovery kit, and suggesting emergency access.
+
+## Not a prerelease
+
+Releases are normal GitHub releases, because the `latest/download` links that
+`install.sh` uses skip prereleases. Being early is signalled by the 0.x version and
+the README warning.
+
+## `install.sh` keeps everything in `main`
+
+A `curl | sh` cut off midway must run nothing, so the script only acts on its last
+line. It's also why manual download stays documented, for people who'd rather not
+pipe to a shell.
+
+## Windows through WSL, not natively
+
+There's no Windows build of Vaultwarden, and building one is a large job for a small
+gain. WSL works for local use, and Docker Desktop support is the realistic next step.
