@@ -56,6 +56,7 @@ Then run `ezvaultwarden init`.
 | Command | What it does |
 |---|---|
 | `init` | Set everything up |
+| `ui` | Open the full-screen app |
 | `status` | Show what's running (`--json` for scripts) |
 | `connect` | Show how to connect apps and the `bw` CLI |
 | `start`, `stop` | Start or stop the server |

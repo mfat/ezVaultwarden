@@ -38,7 +38,7 @@ port, with a certificate from `lego` over Cloudflare DNS.
 | Package | Job |
 |---|---|
 | `cmd/ezvaultwarden` | Entry point |
-| `internal/cli` | Commands and everything the user sees |
+| `internal/cli` | Commands and everything the user sees, including the full-screen app |
 | `internal/config` | Folder layout, `state.json`, generated config files |
 | `internal/runtime` | Starting and stopping services, behind an interface |
 | `internal/fetch` | Verified downloads and self-update |
@@ -112,6 +112,16 @@ resumes. `--access` and `--domain` skip the question, and `--yes` alone stays lo
 Public mode's DNS check uses DNS over HTTPS, because many networks intercept ordinary
 DNS, and finding the public address asks an outside service. Both happen for that choice
 only.
+
+## The full-screen app
+
+`ezvaultwarden ui` is a Bubble Tea app in `internal/cli/ui.go`, and `init` uses the same
+look for its first question. It's laid out for 80×24, and uses the 16 ANSI colours so it
+follows the terminal's own theme, light or dark.
+
+It holds no logic of its own. Each action runs this program's real command as a child and
+shows its output, so the app and the command line can't disagree, and `update` can
+replace the program safely. Anything without a real terminal gets the plain prompts.
 
 ## Backups
 

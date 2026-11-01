@@ -24,7 +24,8 @@ and the vault returning after a reboot with nobody logged in.
 - Importing the certificate into Linux browsers
 - The desktop app logging in
 - `expose local` from `tailnet` on a real machine, and a phone's Bitwarden app
-- The wizard's Tailscale path on a fresh install, and the menu in a real terminal
+- The wizard's Tailscale path on a fresh install
+- Restoring and changing access from `ezvaultwarden ui`. Both are only tested with stand-ins
 - `init` resuming after `signups close` with no account yet
 - A public certificate renewing, and clients logging in to a public vault
 - `expose lan` reaching the vault from another device. It's hidden from users for now

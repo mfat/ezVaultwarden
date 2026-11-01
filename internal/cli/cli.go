@@ -31,6 +31,7 @@ var Version = "dev"
 const usage = `ezVaultwarden: run your own Vaultwarden.
 
   init        Set everything up
+  ui          Open the full-screen app
   status      Show what's running
   connect     Show how to connect apps and the bw CLI
   expose      Change how you reach it: tailnet, public or local
@@ -66,8 +67,11 @@ type app struct {
 	localIP   func() string
 	resources func() (disk, memory uint64)
 	bind443   func() error
-	publicIP  func(ctx context.Context) (string, error)
-	resolve   func(ctx context.Context, host string) ([]string, error)
+
+	fullScreen func() (string, error) // nil outside a real terminal
+	spawn      func(stdin string, args ...string) <-chan uiEvent
+	publicIP   func(ctx context.Context) (string, error)
+	resolve    func(ctx context.Context, host string) ([]string, error)
 }
 
 // Run executes one command and returns the process exit code.
@@ -94,6 +98,10 @@ func Run(args []string) int {
 	a.lookup = net.LookupHost
 	a.localIP = outboundIP
 	a.resources, a.bind443 = resources, bind443
+	a.spawn = spawnSelf
+	if isTerminal(os.Stdin, os.Stdout) {
+		a.fullScreen = pickAccessFullScreen
+	}
 	a.publicIP, a.resolve = publicIP, resolve
 	if len(args) == 0 {
 		fmt.Fprint(a.out, usage)
@@ -101,6 +109,7 @@ func Run(args []string) int {
 	}
 	commands := map[string]func([]string) error{
 		"init":      a.init,
+		"ui":        a.ui,
 		"status":    a.status,
 		"connect":   a.connect,
 		"expose":    a.expose,

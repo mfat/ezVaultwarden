@@ -61,23 +61,36 @@ func (a *app) choosePlan(ctx context.Context, f initFlags) (accessPlan, error) {
 		}
 		return a.preparePlan(ctx, f, mode)
 	}
+	for {
+		mode, err := a.askAccess()
+		if err != nil {
+			return accessPlan{}, err
+		}
+		plan, err := a.preparePlan(ctx, f, mode)
+		if errors.Is(err, errChooseAgain) {
+			fmt.Fprintln(a.out)
+			continue
+		}
+		return plan, err
+	}
+}
+
+// askAccess uses the full-screen wizard in a real terminal, and plain prompts
+// everywhere else.
+func (a *app) askAccess() (string, error) {
+	if a.fullScreen != nil {
+		return a.fullScreen()
+	}
 	fmt.Fprint(a.out, welcome)
 	for {
 		fmt.Fprint(a.out, "Choose 1, 2 or 3: ")
 		answer, err := a.line()
 		if err != nil {
-			return accessPlan{}, errors.New("setup needs an answer. For a script, use: ezvaultwarden init --yes")
+			return "", errors.New("setup needs an answer. For a script, use: ezvaultwarden init --yes")
 		}
-		mode, ok := map[string]string{"1": "local", "2": "tailnet", "3": "public"}[answer]
-		if !ok {
-			continue
+		if mode, ok := map[string]string{"1": "local", "2": "tailnet", "3": "public"}[answer]; ok {
+			return mode, nil
 		}
-		plan, err := a.preparePlan(ctx, f, mode)
-		if errors.Is(err, errChooseAgain) {
-			fmt.Fprint(a.out, "\n", welcome)
-			continue
-		}
-		return plan, err
 	}
 }
 

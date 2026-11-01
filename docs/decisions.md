@@ -85,6 +85,12 @@ loopback redirect and a DNS scope to be confirmed, has no device flow for headle
 machines, and reaches every domain in the account rather than one, so the token would
 stay as the fallback. DNS-PERSIST-01 would be better still once Let's Encrypt offers it.
 
+## The full-screen app runs the real commands
+
+Rewriting each action for the app would mean two versions of restore, update and
+uninstall, and `update` replaces the running program. Running ourselves as a child costs
+some polish, such as live progress bars, and keeps one implementation of everything risky.
+
 ## One setup, and the user decides
 
 We don't detect servers or homes. Detection guessed wrong on clouds with mapped addresses,

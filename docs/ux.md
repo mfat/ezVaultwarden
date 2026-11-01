@@ -152,6 +152,13 @@ Press Enter here to close it.
 `uninstall` stops everything and removes the services. It only deletes vault data
 with `--delete-data`, after you type `delete my vault`.
 
+## The full-screen app
+
+`ezvaultwarden ui` opens a home screen showing what's running, with screens for connecting
+apps, backups, updates, changing access, logs and uninstalling. A banner says where you
+are, and the keys sit along the bottom. Every change asks first, and shows the real
+command's output as it runs.
+
 ## Changing access later
 
 ```text
