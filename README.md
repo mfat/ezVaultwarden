@@ -15,6 +15,19 @@ Open https://localhost:8443 and create your account.
 ✓ Signups closed, nobody else can register
 ```
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mfat/ezVaultwarden/main/install.sh | sh
+```
+
+It installs one binary to `~/.local/bin` without root, after checking it against
+the release's checksums. Rather not pipe to a shell? Download the binary and
+`checksums.txt` from [Releases](https://github.com/mfat/ezVaultwarden/releases),
+or read [install.sh](install.sh) first.
+
+Then run `ezvaultwarden init`.
+
 ## Why
 
 - **No containers needed.** On Linux it runs the official static binaries as
