@@ -79,11 +79,18 @@ main() {
 		echo "⚠ $dir isn't on your PATH, so use the full path below."
 		;;
 	esac
-	data="${EZVAULTWARDEN_HOME:-$HOME/.local/share/ezvaultwarden}"
-	if [ -f "$data/state.json" ]; then
+	state="${EZVAULTWARDEN_HOME:-$HOME/.local/share/ezvaultwarden}/state.json"
+	if [ ! -f "$state" ]; then
+		echo "Next, run: $run init"
+	elif ! grep -q '"signups_closed": true' "$state"; then
+		echo "Setup isn't finished. To finish it, run: $run init"
+	elif [ "$version" != latest ]; then
 		echo "Next, to update your vault too, run: $run update"
 	else
-		echo "Next, run: $run init"
+		# Running this script is the user asking to update. It backs up first, and
+		# rolls back by itself if the new version doesn't come up.
+		"$dir/ezvaultwarden" update --yes </dev/null ||
+			echo "⚠ Your vault wasn't updated. Try again with: $run update"
 	fi
 }
 
