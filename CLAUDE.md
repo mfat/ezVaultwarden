@@ -35,9 +35,9 @@ Ubuntu 24.04 VPS passed the end-to-end tests, the setup menu and a reboot.
 4. **Fix what real use finds,** drop the README warning, release v0.3.0. That's also
    the first real test of self-update, from v0.2.0.
 5. **`tailnet` mode.** `expose tailnet` works on a real tailnet.
-6. **Let's Encrypt over the DNS challenge.** `expose lan` got a real certificate and set
-   the DNS record on a real domain. Connecting from another device and a real renewal
-   are unproven, and that network blocks public names holding private addresses.
+6. **`public` mode.** Caddy on port 443, from the setup wizard or `expose public`.
+7. **`expose lan` is hidden.** It's built with `lego` and Cloudflare, and stays out of the
+   menu and help. Keep it working, but don't show it.
 
 Decided but not built: see the roadmap. WSL detection with a Windows certificate
 step is a small addition worth making alongside item 2.

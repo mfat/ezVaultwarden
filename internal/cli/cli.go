@@ -33,7 +33,8 @@ const usage = `ezVaultwarden: run your own Vaultwarden.
   init        Set everything up
   status      Show what's running
   connect     Show how to connect apps and the bw CLI
-  expose      Choose who can reach it: tailnet, lan, public or local
+  expose      Change how you reach it: tailnet, public or local
+  signups     Open or close signups
   start       Start the server
   stop        Stop the server
   backup      Make an encrypted backup now
@@ -63,6 +64,10 @@ type app struct {
 	openLink  func(url string)
 	lookup    func(host string) ([]string, error)
 	localIP   func() string
+	resources func() (disk, memory uint64)
+	bind443   func() error
+	publicIP  func(ctx context.Context) (string, error)
+	resolve   func(ctx context.Context, host string) ([]string, error)
 }
 
 // Run executes one command and returns the process exit code.
@@ -88,6 +93,8 @@ func Run(args []string) int {
 	a.openLink = openBrowser
 	a.lookup = net.LookupHost
 	a.localIP = outboundIP
+	a.resources, a.bind443 = resources, bind443
+	a.publicIP, a.resolve = publicIP, resolve
 	if len(args) == 0 {
 		fmt.Fprint(a.out, usage)
 		return 0
@@ -97,6 +104,7 @@ func Run(args []string) int {
 		"status":    a.status,
 		"connect":   a.connect,
 		"expose":    a.expose,
+		"signups":   a.signups,
 		"start":     a.start,
 		"stop":      a.stop,
 		"backup":    a.backup,
@@ -336,8 +344,11 @@ func (a *app) status(args []string) error {
 	if problem := a.certProblem(s); problem != "" {
 		a.warn("%s", problem)
 	}
-	if s.HasDomain() && !a.nameWorks(s.Hostname) {
+	if s.UsesLego() && !a.nameWorks(s.Hostname) {
 		a.warnName(s.Hostname)
+	}
+	if on, err := vault.HasTwoStepLogin(a.paths.Data()); s.Mode == "public" && err == nil && !on {
+		a.warn("Two-step login is off, and anyone can see your login page. Turn it on in your vault's Security settings.")
 	}
 	for _, problem := range overrides {
 		a.warn("%s", problem)

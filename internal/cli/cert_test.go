@@ -378,17 +378,6 @@ func TestPublicMachinesAreSentToTailnet(t *testing.T) {
 	}
 }
 
-func TestAcceptRiskSaysWhatItDoes(t *testing.T) {
-	h, _, _, issued := lanSetupDNS(t, "y\ntoken\n")
-	h.localIP = func() string { return "203.0.113.7" }
-	if err := h.expose([]string{"public", "--domain", domain, "--accept-risk"}); err != nil || *issued != 1 {
-		t.Fatalf("err %v, issued %d", err, *issued)
-	}
-	if !strings.Contains(h.output.String(), "on the internet") {
-		t.Fatalf("no warning: %s", h.output)
-	}
-}
-
 func TestIsPublic(t *testing.T) {
 	cases := map[string]bool{
 		"203.0.113.7": true, "198.51.100.20": true, "192.168.1.20": false, "10.0.0.5": false,

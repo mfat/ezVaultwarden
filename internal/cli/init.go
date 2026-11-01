@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -26,7 +25,9 @@ import (
 
 type initFlags struct {
 	port   int
-	assume bool // answer yes to everything, for scripts
+	assume bool   // answer yes to everything, for scripts
+	access string // local, tailnet or public, skipping the question
+	domain string
 }
 
 func (a *app) init(args []string) error {
@@ -34,6 +35,8 @@ func (a *app) init(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.IntVar(&f.port, "port", 8443, "port for the web vault")
 	fs.BoolVar(&f.assume, "yes", false, "don't ask questions")
+	fs.StringVar(&f.access, "access", "", "how to reach the vault: local, tailnet or public")
+	fs.StringVar(&f.domain, "domain", "", "your domain name, for public access")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -43,12 +46,22 @@ func (a *app) init(args []string) error {
 	s, err := a.load()
 	switch {
 	case errors.Is(err, config.ErrNotSetUp):
-		if s, err = a.install(ctx, f); err != nil {
+		if goruntime.GOOS != "linux" {
+			return errors.New("native mode runs on Linux. Docker and Podman support is coming")
+		}
+		plan, err := a.choosePlan(ctx, f)
+		if err != nil {
+			return err
+		}
+		if s, err = a.install(ctx, f, plan); err != nil {
+			if plan.mode == "tailnet" {
+				_ = a.ts.StopServing(ctx)
+			}
 			return err
 		}
 	case err != nil:
 		return err
-	case s.SignupsClosed:
+	case s.SignupsClosed && a.hasAccount():
 		return fmt.Errorf("already set up at %s. See: ezvaultwarden status", s.URL())
 	default:
 		fmt.Fprintln(a.out, "Picking up where setup left off.")
@@ -56,23 +69,15 @@ func (a *app) init(args []string) error {
 	return a.finish(ctx, s, f)
 }
 
-func (a *app) install(ctx context.Context, f initFlags) (config.State, error) {
+func (a *app) hasAccount() bool {
+	emails, _ := vault.Accounts(a.paths.Data())
+	return len(emails) > 0
+}
+
+func (a *app) install(ctx context.Context, f initFlags, plan accessPlan) (config.State, error) {
 	var s config.State
-	if goruntime.GOOS != "linux" {
-		return s, errors.New("native mode runs on Linux. Docker and Podman support is coming")
-	}
-	if err := a.rt.Available(); err != nil {
-		return s, err
-	}
 	backendPort := f.port + 10000
-	for _, port := range []int{f.port, backendPort} {
-		l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-		if err != nil {
-			return s, fmt.Errorf("port %d is in use. Pick another with: ezvaultwarden init --port N", port)
-		}
-		l.Close()
-	}
-	fmt.Fprintf(a.out, "ezVaultwarden %s\n\n", Version)
+	fmt.Fprintf(a.out, "\nezVaultwarden %s\n\n", Version)
 	for _, dir := range []string{a.paths.Root, a.paths.Data(), a.paths.Backups(), a.paths.Versions(), a.paths.CaddyData()} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return s, err
@@ -96,7 +101,7 @@ func (a *app) install(ctx context.Context, f initFlags) (config.State, error) {
 		return s, err
 	}
 	s = config.State{
-		Version: fetch.VaultwardenVersion, Runtime: a.rt.Name(), Mode: "local",
+		Version: fetch.VaultwardenVersion, Runtime: a.rt.Name(), Mode: plan.mode, Hostname: plan.host,
 		Port: f.port, BackendPort: backendPort, BackupRecipient: recipient,
 	}
 	if err := config.Write(a.paths, s); err != nil {
@@ -115,7 +120,7 @@ func (a *app) install(ctx context.Context, f initFlags) (config.State, error) {
 	if err := a.health(ctx, s); err != nil {
 		return s, err
 	}
-	a.ok("Service started at %s", s.URL())
+	a.ok("Service started")
 	return s, nil
 }
 
@@ -239,8 +244,14 @@ func (a *app) probe(ctx context.Context, s config.State) error {
 }
 
 func (a *app) finish(ctx context.Context, s config.State, f initFlags) error {
-	s, planPublic, err := a.chooseAccess(ctx, s, f)
-	if err != nil {
+	// Signups closed by hand with no account yet: this run is the way back in.
+	if s.SignupsClosed {
+		s.SignupsClosed = false
+		if err := a.applyMode(ctx, s); err != nil {
+			return err
+		}
+	}
+	if err := a.confirmAddress(ctx, s); err != nil {
 		return err
 	}
 	email, err := a.waitForAccount(ctx, s)
@@ -265,7 +276,7 @@ func (a *app) finish(ctx context.Context, s config.State, f initFlags) error {
 	if err := a.showRecoveryKit(s, email, f); err != nil {
 		return err
 	}
-	if planPublic {
+	if s.Mode == "public" {
 		a.showPublicSteps()
 	}
 	fmt.Fprintln(a.out, "\nConnect a client:   ezvaultwarden connect")
@@ -273,10 +284,7 @@ func (a *app) finish(ctx context.Context, s config.State, f initFlags) error {
 }
 
 func (a *app) waitForAccount(ctx context.Context, s config.State) (string, error) {
-	fmt.Fprintf(a.out, "\nOpen %s and create your account.\n", s.URL())
-	if s.Mode == "local" {
-		fmt.Fprintf(a.out, "Your browser will warn you until you import %s into its certificate settings.\n", a.paths.RootCert())
-	}
+	a.showAccountStep(s)
 	fmt.Fprintln(a.out, "Waiting for your account...")
 	for {
 		emails, err := vault.Accounts(a.paths.Data())

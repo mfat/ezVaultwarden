@@ -69,7 +69,12 @@ func (a *app) admin(args []string) error {
 	if err := a.rewrite(ctx, s); err != nil {
 		return errors.Join(err, a.closeAdmin(s))
 	}
-	fmt.Fprintf(a.out, "Admin page open at %s/admin\n", s.URL())
+	if s.Mode == "public" {
+		// The public site never serves it, so reach it through a tunnel.
+		fmt.Fprintf(a.out, "Admin page open at %s/admin, through: ssh -L %d:localhost:%d you@your-server\n", s.LocalURL(), s.Port, s.Port)
+	} else {
+		fmt.Fprintf(a.out, "Admin page open at %s/admin\n", s.URL())
+	}
 	fmt.Fprintf(a.out, "Password, for this session only: %s\n\n", password)
 	a.warn("Settings you save there override ezVaultwarden's, including closed signups.")
 	fmt.Fprintln(a.out, "\nPress Enter here to close it.")

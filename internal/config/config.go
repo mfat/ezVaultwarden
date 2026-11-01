@@ -85,16 +85,17 @@ type Previous struct {
 // URL is the address clients use.
 func (s State) URL() string {
 	switch {
-	case s.Mode == "tailnet":
+	case s.Mode == "tailnet" || s.Mode == "public":
 		return "https://" + s.Hostname
-	case s.HasDomain():
+	case s.UsesLego():
 		return fmt.Sprintf("https://%s:%d", s.Hostname, s.Port)
 	}
 	return s.LocalURL()
 }
 
-// HasDomain reports whether the vault uses the user's own domain and certificate.
-func (s State) HasDomain() bool { return s.Mode == "lan" || s.Mode == "public" }
+// UsesLego reports the lan mode, which is hidden from users for now. It's the one
+// mode with a certificate we fetch ourselves.
+func (s State) UsesLego() bool { return s.Mode == "lan" }
 
 // LocalURL is Caddy on this machine, which answers in every mode.
 func (s State) LocalURL() string { return fmt.Sprintf("https://localhost:%d", s.Port) }
@@ -163,10 +164,10 @@ func VaultwardenEnv(p Paths, s State) string {
 }
 
 // Caddyfile renders the TLS front end. The localhost site stays in every mode,
-// because health checks use it. Only the domain modes listen beyond this machine.
+// because health checks use it.
 func Caddyfile(p Paths, s State) string {
 	bind, lan := "\tbind 127.0.0.1\n", ""
-	if s.HasDomain() {
+	if s.UsesLego() {
 		bind = ""
 		lan = fmt.Sprintf(`
 https://%s:%d {
@@ -174,6 +175,22 @@ https://%s:%d {
 	reverse_proxy 127.0.0.1:%d
 }
 `, s.Hostname, s.Port, p.CertFile(s.Hostname), p.CertKey(s.Hostname), s.BackendPort)
+	}
+	if s.Mode == "public" {
+		// Port 80 stays closed, because Let's Encrypt can check over 443 alone.
+		// The admin page stays off the internet even while it's open.
+		lan = fmt.Sprintf(`
+https://%s {
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+	@admin path /admin /admin/*
+	respond @admin 404
+	reverse_proxy 127.0.0.1:%d
+}
+`, s.Hostname, s.BackendPort)
 	}
 	return fmt.Sprintf(`{
 	admin off

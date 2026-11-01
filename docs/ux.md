@@ -127,41 +127,18 @@ Press Enter here to close it.
 `uninstall` stops everything and removes the services. It only deletes vault data
 with `--delete-data`, after you type `delete my vault`.
 
-## Going remote
-
-Every step up in exposure is a deliberate choice, and tells you what changes.
+## Changing access later
 
 ```text
 $ ezvaultwarden expose tailnet
 ✓ Available to your devices at https://vault.tail1234.ts.net
   Not reachable from the public internet.
 
-$ ezvaultwarden expose public --domain vault.example.com
-
-  ✓ Two-step login is on
-  ✗ Backups are only on this server. Add a place with: ezvaultwarden backup --target /path
-
-✗ fix these first, or re-run with --accept-risk
-```
-
-## Real certificates
-
-```text
-$ ezvaultwarden expose lan --domain vault.example.com --dns cloudflare
-This makes your vault login page reachable from every device on your network,
-at https://vault.example.com:8443. It stays off the internet while this machine is behind a router.
-The name vault.example.com goes into public certificate logs, and public DNS
-will show this machine's local address.
+$ ezvaultwarden expose public --domain vault.mydomain.com
+✓ Port 443 is free, and vault.mydomain.com points to this machine
 Continuing accepts Let's Encrypt's terms: https://letsencrypt.org/repository/
 Continue? [y/N] y
-ezVaultwarden needs a Cloudflare API token. On the page that opens, click
-Continue to summary, then Create Token. If this account has other domains, first
-set Zone Resources to the one that holds vault.example.com. Paste the token here:
-  https://dash.cloudflare.com/profile/api-tokens?...
-Cloudflare API token:
-✓ Certificate issued for vault.example.com, renews automatically
-✓ Available on your network at https://vault.example.com:8443
-✓ Cloudflare now points vault.example.com to this machine, 192.168.1.20
+✓ Certificate issued. Your vault is online at https://vault.mydomain.com
 ```
 
 ## What can't be fully smooth
@@ -174,10 +151,9 @@ Cloudflare API token:
 - **Tailscale setup.** `expose tailnet` needs MagicDNS and HTTPS turned on in the
   Tailscale admin console, plus one `sudo tailscale set --operator=$USER`. It names
   each step when it's missing. The machine's name ends up in public certificate logs.
-- **Firewalls and routers for `lan`.** The user may need to allow the port. Some routers
-  and networks also block public DNS answers holding a private address, as rebinding
-  protection, and some intercept all DNS.
-- **The Cloudflare token.** Creating one takes a logged-in person. See decisions.
+- **Port 443 without root.** It needs one `sudo` step, which we print and never run.
+- **The moment before the first account on `public`.** Signups are open, so the wizard
+  says plainly to create the account now, and how to close signups by hand.
 - **`curl | sh`.** Convenient, but some people won't like it, so manual download
   stays documented.
 - **WSL.** Windows browsers need the certificate imported by hand, and WSL can stop

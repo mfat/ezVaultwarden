@@ -65,6 +65,12 @@ The token stays in a file `lego` reads itself, so it's never in a process list. 
 register no email: Let's Encrypt has stopped sending expiry mail, so `status` warns
 instead.
 
+## Hidden: Let's Encrypt on a LAN
+
+`expose lan` works and stays in the code, but it's off the menu and out of the help.
+The Cloudflare token, the router problems and the home-only reach made it the hardest
+option to explain. The notes below are why it's built the way it is.
+
 ## The token stays, for now
 
 Nginx Proxy Manager and similar tools also ask for a pasted token, because creating one
@@ -79,12 +85,27 @@ loopback redirect and a DNS scope to be confirmed, has no device flow for headle
 machines, and reaches every domain in the account rather than one, so the token would
 stay as the fallback. DNS-PERSIST-01 would be better still once Let's Encrypt offers it.
 
-## Public access only with a public address
+## One setup, and the user decides
 
-`expose public` listens on the internet, so it's offered only when the machine holds a
-public address itself. We can't tell whether an address is static, or see a mapped one
-on clouds like AWS and Oracle, so those machines get the home menu, and can still run
-`expose public --accept-risk` by hand. `expose lan` refuses on a public address.
+We don't detect servers or homes. Detection guessed wrong on clouds with mapped addresses,
+and a second menu was more to explain. The menu is the same everywhere, and the checks
+follow from the answer. A private address on public access warns rather than refuses,
+because a cloud server can look like that and still work.
+
+## Public access through Caddy on port 443
+
+Caddy's automatic HTTPS needs only a domain pointing here and port 443. That means no
+token, no `lego`, any DNS provider and a normal address. The cost is one `sudo` step when
+not running as root, which we print and never run. Port 80 stays closed, as the TLS check
+works over 443, so plain `http://` links fail instead of redirecting.
+
+## Public signups stay open until the first account
+
+A public site can't use an SSH tunnel for ordinary users, and a temporary password would
+be more to explain. So the wizard says plainly to create the account now, closes signups
+automatically when it appears, and teaches `signups close` for stopping partway. The price
+is a short window where someone else could register. Two-step login can't be required
+before the account exists, so `status` warns until it's on.
 
 ## Backups encrypted to a public key
 

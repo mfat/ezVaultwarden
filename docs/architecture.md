@@ -26,9 +26,12 @@ machine's tailnet name and forwards to Vaultwarden directly. Caddy keeps running
 `localhost`, because health checks use it in every mode. `DOMAIN` follows the mode,
 so the server restarts when the mode changes.
 
-`expose lan` keeps Caddy as the way in, but drops its loopback bind so it listens on
-every interface, and adds a site for the user's domain using `lego`'s certificate.
-It stays on the same port, because 443 would need root.
+`public` mode adds a Caddy site for the user's domain on port 443. Caddy gets and renews
+the certificate itself over port 443 alone, so port 80 stays closed, and any DNS provider
+works. That site never serves `/admin`.
+
+`lan` mode is built but hidden from users. It listens on every interface on the same
+port, with a certificate from `lego` over Cloudflare DNS.
 
 ## Code layout
 
@@ -91,15 +94,24 @@ complete, so finding one is proof it was verified.
 
 ## Setup flow
 
-`init` checks ports and systemd, downloads, writes config, installs the services,
-and waits until Caddy answers over TLS with a certificate from our own CA. It then
-asks how the user wants to reach the vault, and sets that up. This comes before the
-account, because a machine with no screen can't open `localhost`. It waits for the
-first account by reading the database, closes signups, restarts, and shows the recovery
-kit. If interrupted, rerunning it resumes. `--yes` skips the menu and stays local.
+`init` asks how the user wants to reach the vault before anything is installed. It
+never guesses what kind of machine this is. Then it runs the checks that choice needs,
+so a problem costs nothing:
 
-`expose public` needs an account with two-step login, so choosing it in the menu only
-creates the account through an SSH tunnel, then lists the remaining steps.
+| Choice | Checks |
+|---|---|
+| Any | systemd, disk, memory, ports |
+| Tailscale | Logged in, certificates allowed, `tailscale serve` permitted |
+| Public | Port 443 usable, the domain resolves here, a warning if the address is private |
+
+After that it downloads, writes config for the final address, installs the services and
+confirms the address works. It waits for the first account by reading the database,
+closes signups, restarts, and shows the recovery kit. If interrupted, rerunning it
+resumes. `--access` and `--domain` skip the question, and `--yes` alone stays local.
+
+Public mode's DNS check uses DNS over HTTPS, because many networks intercept ordinary
+DNS, and finding the public address asks an outside service. Both happen for that choice
+only.
 
 ## Backups
 

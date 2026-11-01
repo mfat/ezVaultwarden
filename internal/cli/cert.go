@@ -20,7 +20,6 @@ import (
 	"github.com/mfat/ezVaultwarden/internal/cloudflare"
 	"github.com/mfat/ezVaultwarden/internal/config"
 	"github.com/mfat/ezVaultwarden/internal/fetch"
-	"github.com/mfat/ezVaultwarden/internal/vault"
 )
 
 // dnsHost is the part of a DNS provider we need.
@@ -34,52 +33,32 @@ type dnsHost interface {
 // gets through.
 var validHost = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$`)
 
-// exposeDomain puts the vault on the user's own domain, for their network or the
-// whole internet. Setup can do lan before an account exists, because it closes
-// signups straight after the first one.
-func (a *app) exposeDomain(ctx context.Context, s config.State, mode string, args []string, setup bool) error {
-	fs := flag.NewFlagSet("expose "+mode, flag.ContinueOnError)
+// exposeLAN puts the vault on the user's own domain, for their network, using
+// Let's Encrypt over Cloudflare DNS. It's hidden from users for now.
+func (a *app) exposeLAN(ctx context.Context, s config.State, args []string) error {
+	fs := flag.NewFlagSet("expose lan", flag.ContinueOnError)
 	domain := fs.String("domain", "", "name for the vault, such as vault.example.com")
 	dns := fs.String("dns", "cloudflare", "DNS provider that hosts the domain")
 	assume := fs.Bool("yes", false, "don't ask for confirmation")
-	acceptRisk := fs.Bool("accept-risk", false, "skip the safety checks for public access")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	host := strings.ToLower(*domain)
 	if !validHost.MatchString(host) {
-		return fmt.Errorf("name the vault with: ezvaultwarden expose %s --domain vault.example.com", mode)
+		return errors.New("name the vault with: ezvaultwarden expose lan --domain vault.example.com")
 	}
 	if *dns != "cloudflare" {
 		return fmt.Errorf("%s isn't supported yet. Only cloudflare is", *dns)
 	}
-	if !s.SignupsClosed && !(setup && mode == "lan") {
+	if !s.SignupsClosed {
 		return errors.New("signups are still open, so anyone who reaches this could register. Finish with: ezvaultwarden init")
 	}
-	public := isPublic(a.localIP())
-	switch {
-	case mode == "lan" && public:
+	if isPublic(a.localIP()) {
 		return fmt.Errorf("this machine has a public address, %s, so this would put your vault login page "+
 			"on the internet. Use this instead: ezvaultwarden expose tailnet", a.localIP())
-	case mode == "public" && !*acceptRisk:
-		if !public {
-			return errors.New("this needs a machine with its own public address. This one is behind a router, " +
-				"so use: ezvaultwarden expose tailnet. If you've forwarded the port yourself, add --accept-risk")
-		}
-		if err := a.checkPublicSafety(s); err != nil {
-			return err
-		}
 	}
-	if mode == "public" {
-		a.warn("This puts your vault login page on the internet, at https://%s:%d.", host, s.Port)
-		fmt.Fprintln(a.out, "  Anyone can try to log in. A strong master password and two-step login protect you.")
-	} else {
-		fmt.Fprintf(a.out, "This makes your vault login page reachable from every device on your network,\n")
-		fmt.Fprintf(a.out, "at https://%s:%d. It stays off the internet while this machine is behind a router.\n", host, s.Port)
-		if !s.SignupsClosed {
-			fmt.Fprintln(a.out, "Until you create your account, someone else on your network could register first.")
-		}
-	}
+	fmt.Fprintf(a.out, "This makes your vault login page reachable from every device on your network,\n")
+	fmt.Fprintf(a.out, "at https://%s:%d. It stays off the internet while this machine is behind a router.\n", host, s.Port)
 	fmt.Fprintf(a.out, "The name %s goes into public certificate logs, and public DNS\n", host)
 	fmt.Fprintln(a.out, "will show this machine's address.")
 	fmt.Fprintln(a.out, "Continuing accepts Let's Encrypt's terms: https://letsencrypt.org/repository/")
@@ -98,7 +77,7 @@ func (a *app) exposeDomain(ctx context.Context, s config.State, mode string, arg
 	fmt.Fprintln(a.out, "  Requesting a certificate. This can take a minute or two...")
 	if err := a.issue(ctx, host); err != nil {
 		// A rejected token would otherwise be reused with no way to retype it.
-		if !s.HasDomain() {
+		if !s.UsesLego() {
 			if forgetErr := a.forgetDNSToken(); forgetErr != nil {
 				a.warn("Couldn't delete the DNS token at %s: %v", a.paths.DNSToken(), forgetErr)
 			}
@@ -114,7 +93,7 @@ func (a *app) exposeDomain(ctx context.Context, s config.State, mode string, arg
 		return err
 	}
 	before := s
-	s.Mode, s.Hostname = mode, host
+	s.Mode, s.Hostname = "lan", host
 	if err := a.applyMode(ctx, s); err != nil {
 		if undoErr := a.applyMode(ctx, before); undoErr != nil {
 			a.warn("Couldn't go back to the previous address: %v", undoErr)
@@ -126,48 +105,11 @@ func (a *app) exposeDomain(ctx context.Context, s config.State, mode string, arg
 			a.warn("Couldn't stop Tailscale serving the vault: %v", err)
 		}
 	}
-	if mode == "public" {
-		a.ok("Available from anywhere at %s", s.URL())
-	} else {
-		a.ok("Available on your network at %s", s.URL())
-	}
-	if !setup {
-		a.warn("Apps set to the old address need the new one. See: ezvaultwarden connect")
-	}
+	a.ok("Available on your network at %s", s.URL())
+	a.warn("Apps set to the old address need the new one. See: ezvaultwarden connect")
 	a.pointDNS(ctx, s)
 	fmt.Fprintf(a.out, "  If a firewall is on, allow port %d.\n", s.Port)
 	return nil
-}
-
-// checkPublicSafety is the price of being on the internet: a second login step,
-// and a backup that survives losing this server.
-func (a *app) checkPublicSafety(s config.State) error {
-	checks := []struct {
-		ok   bool
-		good string
-		bad  string
-	}{
-		{a.twoStep(), "Two-step login is on", "Two-step login is off. Turn it on in your vault's Security settings"},
-		{len(s.BackupTargets) > 0, "Backups also go somewhere else", "Backups are only on this server. Add a place with: ezvaultwarden backup --target /path"},
-	}
-	ready := true
-	for _, c := range checks {
-		if c.ok {
-			fmt.Fprintf(a.out, "  ✓ %s\n", c.good)
-		} else {
-			fmt.Fprintf(a.out, "  ✗ %s\n", c.bad)
-			ready = false
-		}
-	}
-	if !ready {
-		return errors.New("fix these first, or re-run with --accept-risk")
-	}
-	return nil
-}
-
-func (a *app) twoStep() bool {
-	on, err := vault.HasTwoStepLogin(a.paths.Data())
-	return err == nil && on
 }
 
 // saveDNSToken keeps a token that works for host, owner-only, for renewals. A
@@ -209,10 +151,10 @@ func (a *app) forgetDNSToken() error {
 	return nil
 }
 
-// dropDNS clears up after the domain modes: our DNS record, then the token. Failing here
+// dropDNS clears up after lan mode: our DNS record, then the token. Failing here
 // mustn't stop the user leaving the mode, so it only warns.
 func (a *app) dropDNS(ctx context.Context, s config.State) {
-	if token, err := a.savedToken(); err == nil && s.HasDomain() {
+	if token, err := a.savedToken(); err == nil && s.UsesLego() {
 		dns := a.dns(token)
 		zone, err := dns.Zone(ctx, s.Hostname)
 		if err == nil {
@@ -380,7 +322,7 @@ func (a *app) renewCert([]string) error {
 	if err != nil {
 		return err
 	}
-	if !s.HasDomain() {
+	if !s.UsesLego() {
 		return nil
 	}
 	if ip := a.localIP(); ip != "" {
@@ -425,12 +367,12 @@ func (a *app) certCheckDue() bool {
 // healthy certificate renews weeks ahead, so two weeks left means renewal is
 // failing.
 func (a *app) certProblem(s config.State) string {
-	if !s.HasDomain() {
+	if !s.UsesLego() {
 		return ""
 	}
 	raw, err := os.ReadFile(a.paths.CertFile(s.Hostname))
 	if err != nil {
-		return "The certificate is missing. Fix it with: ezvaultwarden expose " + s.Mode + " --domain " + s.Hostname
+		return "The certificate is missing. Fix it with: ezvaultwarden expose lan --domain " + s.Hostname
 	}
 	block, _ := pem.Decode(raw)
 	if block == nil {

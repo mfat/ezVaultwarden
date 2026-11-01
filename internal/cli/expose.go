@@ -20,7 +20,7 @@ type tailnet interface {
 
 func (a *app) expose(args []string) error {
 	if len(args) == 0 {
-		return errors.New("choose a mode: ezvaultwarden expose tailnet|lan|public|local")
+		return errors.New("choose how to reach your vault: ezvaultwarden expose tailnet|public|local")
 	}
 	s, err := a.load()
 	if err != nil {
@@ -29,34 +29,23 @@ func (a *app) expose(args []string) error {
 	ctx := context.Background()
 	switch args[0] {
 	case "tailnet":
-		return a.exposeTailnet(ctx, s, false)
-	case "lan", "public":
-		return a.exposeDomain(ctx, s, args[0], args[1:], false)
+		return a.exposeTailnet(ctx, s)
+	case "public":
+		return a.exposePublic(ctx, s, args[1:])
+	case "lan": // hidden for now, so the error below doesn't list it
+		return a.exposeLAN(ctx, s, args[1:])
 	case "local":
 		return a.exposeLocal(ctx, s)
 	}
-	return fmt.Errorf("unknown mode %q. Choose tailnet, lan, public or local", args[0])
+	return fmt.Errorf("unknown option %q. Choose tailnet, public or local", args[0])
 }
 
-// exposeTailnet can run during setup with signups open, because only the user's
-// own devices can reach it. That's how a server with no screen gets its account.
-func (a *app) exposeTailnet(ctx context.Context, s config.State, setup bool) error {
-	if !s.SignupsClosed && !setup {
+func (a *app) exposeTailnet(ctx context.Context, s config.State) error {
+	if !s.SignupsClosed {
 		return errors.New("signups are still open, so anyone who reaches this could register. Finish with: ezvaultwarden init")
 	}
-	host, err := a.ts.Lookup(ctx)
+	host, err := a.startServing(ctx, fmt.Sprintf("http://127.0.0.1:%d", s.BackendPort))
 	if err != nil {
-		return err
-	}
-	target := fmt.Sprintf("http://127.0.0.1:%d", s.BackendPort)
-	current, err := a.ts.Proxying(ctx, host)
-	if err != nil {
-		return err
-	}
-	if current != "" && current != target {
-		return fmt.Errorf("port 443 on %s is already in use by Tailscale (%s). Free it first", host, current)
-	}
-	if err := a.ts.Serve(ctx, target); err != nil {
 		return err
 	}
 	before := s
@@ -70,20 +59,15 @@ func (a *app) exposeTailnet(ctx context.Context, s config.State, setup bool) err
 		}
 		return err
 	}
-	if before.HasDomain() {
+	if before.UsesLego() {
 		a.dropDNS(ctx, before)
 	}
-	if err := a.reachable(ctx, s.URL()); err != nil {
-		a.warn("It didn't answer at %s yet: %v", s.URL(), err)
-		fmt.Fprintln(a.out, "  The first certificate can take a minute. Try the address in a browser.")
-	} else {
-		a.ok("Available to your devices at %s", s.URL())
+	if err := a.confirmAddress(ctx, s); err != nil {
+		return err
 	}
 	fmt.Fprintln(a.out, "  Not reachable from the public internet.")
 	fmt.Fprintln(a.out, "  This machine's name is now in public certificate logs.")
-	if !setup {
-		a.warn("Apps set to the old address need the new one. See: ezvaultwarden connect")
-	}
+	a.warn("Apps set to the old address need the new one. See: ezvaultwarden connect")
 	return nil
 }
 
@@ -93,16 +77,11 @@ func (a *app) exposeLocal(ctx context.Context, s config.State) error {
 		return nil
 	}
 	before := s
-	if s.Mode == "tailnet" {
-		if err := a.ts.StopServing(ctx); err != nil {
-			return err
-		}
-	}
 	s.Mode, s.Hostname = "local", ""
 	if err := a.applyMode(ctx, s); err != nil {
 		return err
 	}
-	a.dropDNS(ctx, before)
+	a.leaveMode(ctx, before)
 	a.ok("Back to this machine only, at %s", s.URL())
 	a.warn("Apps set to the old address need the new one. See: ezvaultwarden connect")
 	return nil

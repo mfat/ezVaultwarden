@@ -47,9 +47,8 @@ with nobody logged in.
    and other devices can reach the vault with no public exposure and a real certificate.
 7. **Docker and Podman,** behind the existing `Runtime` interface. This also gives
    Mac and Windows users a path.
-8. **`lan` mode,** built as `expose lan` with a real certificate over the DNS
-   challenge, so no ports open. Cloudflare only so far, and it needs a real test.
-9. **`public` mode with Let's Encrypt,** and hard safety checks.
+8. **`lan` mode,** built as `expose lan`, but hidden from users.
+9. **`public` mode,** built with Caddy on port 443.
 10. **Local web dashboard.**
 
 ## Planned designs
@@ -61,9 +60,9 @@ Each is opt-in, and going back is one command: `ezvaultwarden expose local`.
 | Mode | Reachable from | Certificate |
 |---|---|---|
 | `local` (today) | This machine | Caddy's private CA |
-| `lan` | Your network | Let's Encrypt by DNS challenge |
 | `tailnet` | Your own devices anywhere | Tailscale |
-| `public` | The internet | Let's Encrypt, or Cloudflare Tunnel |
+| `public` | The internet | Let's Encrypt, through Caddy on port 443 |
+| `lan` (hidden) | Your network | Let's Encrypt by DNS challenge |
 
 Phones won't trust a private CA without manual setup, so point phone users at
 `tailnet` or a real certificate.
@@ -83,12 +82,8 @@ Phones won't trust a private CA without manual setup, so point phone users at
 
 ### `public` mode safety
 
-Until this is built, `expose lan` refuses on a machine with a public address, unless
-the user passes `--accept-risk`, and points them to `tailnet`.
-
-`expose public` should refuse to start without 2FA on the account, a backup off this
-disk, and login rate limits, unless the user passes `--accept-risk`. `status` should
-warn loudly about pending security updates.
+`status` warns until two-step login is on. It should also warn loudly about pending
+security updates, and about login rate limits.
 
 ### Update options
 
