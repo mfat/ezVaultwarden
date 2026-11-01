@@ -19,7 +19,9 @@ and a browser extension logging in.
 - Importing the certificate into Linux browsers
 - The desktop app logging in
 - Surviving a reboot
-- `expose tailnet` against real Tailscale. It's only tested with a stand-in
+- `expose local` from `tailnet` on a real machine, and a phone's Bitwarden app
+- `expose lan` with a real domain, and a real renewal. `lego` 5's renewal behaviour is
+  from its docs
 - Self-update from a real GitHub release. The first test is v0.2.0 to the next one
 - The `arm64` build, which has been built but never run
 
@@ -37,12 +39,12 @@ and a browser extension logging in.
 ## Then
 
 5. **Better WSL support.** Detect it, and print the Windows certificate step.
-6. **`tailnet` mode.** Built as `expose tailnet`, and needs a real test. Phones and
-   other devices can reach the vault with no public exposure and a real certificate.
-   This is what makes it useful day to day.
+6. **`tailnet` mode.** Built as `expose tailnet`, and working on a real tailnet. Phones
+   and other devices can reach the vault with no public exposure and a real certificate.
 7. **Docker and Podman,** behind the existing `Runtime` interface. This also gives
    Mac and Windows users a path.
-8. **`lan` mode,** with a real certificate over the DNS challenge, so no ports open.
+8. **`lan` mode,** built as `expose lan` with a real certificate over the DNS
+   challenge, so no ports open. Cloudflare only so far, and it needs a real test.
 9. **`public` mode with Let's Encrypt,** and hard safety checks.
 10. **Local web dashboard.**
 
@@ -55,7 +57,7 @@ Each is opt-in, and going back is one command: `ezvaultwarden expose local`.
 | Mode | Reachable from | Certificate |
 |---|---|---|
 | `local` (today) | This machine | Caddy's private CA |
-| `lan` | Your network | Private CA, or a real one by DNS challenge |
+| `lan` | Your network | Let's Encrypt by DNS challenge |
 | `tailnet` | Your own devices anywhere | Tailscale |
 | `public` | The internet | Let's Encrypt, or Cloudflare Tunnel |
 

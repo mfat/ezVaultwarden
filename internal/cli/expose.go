@@ -19,8 +19,8 @@ type tailnet interface {
 }
 
 func (a *app) expose(args []string) error {
-	if len(args) != 1 {
-		return errors.New("choose a mode: ezvaultwarden expose tailnet|local")
+	if len(args) == 0 {
+		return errors.New("choose a mode: ezvaultwarden expose tailnet|lan|local")
 	}
 	s, err := a.load()
 	if err != nil {
@@ -30,10 +30,12 @@ func (a *app) expose(args []string) error {
 	switch args[0] {
 	case "tailnet":
 		return a.exposeTailnet(ctx, s)
+	case "lan":
+		return a.exposeLAN(ctx, s, args[1:])
 	case "local":
 		return a.exposeLocal(ctx, s)
 	}
-	return fmt.Errorf("unknown mode %q. Choose tailnet or local", args[0])
+	return fmt.Errorf("unknown mode %q. Choose tailnet, lan or local", args[0])
 }
 
 func (a *app) exposeTailnet(ctx context.Context, s config.State) error {
@@ -83,11 +85,16 @@ func (a *app) exposeLocal(ctx context.Context, s config.State) error {
 		a.ok("Already local at %s", s.URL())
 		return nil
 	}
-	if err := a.ts.StopServing(ctx); err != nil {
-		return err
+	if s.Mode == "tailnet" {
+		if err := a.ts.StopServing(ctx); err != nil {
+			return err
+		}
 	}
 	s.Mode, s.Hostname = "local", ""
 	if err := a.applyMode(ctx, s); err != nil {
+		return err
+	}
+	if err := a.forgetDNSToken(); err != nil {
 		return err
 	}
 	a.ok("Back to this machine only, at %s", s.URL())
@@ -95,7 +102,8 @@ func (a *app) exposeLocal(ctx context.Context, s config.State) error {
 	return nil
 }
 
-// applyMode restarts the server, because DOMAIN must match the address clients use.
+// applyMode restarts both services: DOMAIN must match the address clients use,
+// and the mode decides what Caddy listens on.
 func (a *app) applyMode(ctx context.Context, s config.State) error {
 	if err := config.Write(a.paths, s); err != nil {
 		return err
@@ -104,6 +112,9 @@ func (a *app) applyMode(ctx context.Context, s config.State) error {
 		return err
 	}
 	if err := a.rt.RestartVault(); err != nil {
+		return err
+	}
+	if err := a.rt.RestartProxy(); err != nil {
 		return err
 	}
 	return a.health(ctx, s)

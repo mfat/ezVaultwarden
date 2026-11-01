@@ -19,6 +19,8 @@ const (
 	caddyUnit  = "ezvaultwarden-proxy.service"
 	backupUnit = "ezvaultwarden-backup.service"
 	timerUnit  = "ezvaultwarden-backup.timer"
+	certUnit   = "ezvaultwarden-cert.service"
+	certTimer  = "ezvaultwarden-cert.timer"
 )
 
 // Systemd runs the static binaries as user services, so nothing needs root.
@@ -96,6 +98,25 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 `,
+		certUnit: fmt.Sprintf(`[Unit]
+Description=ezVaultwarden certificate renewal
+
+[Service]
+Type=oneshot
+Environment=EZVAULTWARDEN_HOME=%s
+ExecStart="%s" renew-cert
+`, p.Root, self),
+		certTimer: `[Unit]
+Description=ezVaultwarden certificate renewal
+
+[Timer]
+OnCalendar=04:00
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+`,
 	}
 }
 
@@ -129,7 +150,7 @@ func (s Systemd) Install(self string) error {
 	if err := systemctl("daemon-reload"); err != nil {
 		return err
 	}
-	if err := systemctl("enable", "--now", vaultUnit, caddyUnit, timerUnit); err != nil {
+	if err := systemctl("enable", "--now", vaultUnit, caddyUnit, timerUnit, certTimer); err != nil {
 		return err
 	}
 	s.keepRunningAfterLogout()
@@ -180,6 +201,9 @@ func (Systemd) StopVault() error { return systemctl("stop", vaultUnit) }
 // RestartVault implements Runtime.
 func (Systemd) RestartVault() error { return systemctl("restart", vaultUnit) }
 
+// RestartProxy implements Runtime.
+func (Systemd) RestartProxy() error { return systemctl("restart", caddyUnit) }
+
 // Running implements Runtime.
 func (Systemd) Running() bool {
 	// One unit at a time: given several, is-active succeeds if any is up.
@@ -197,13 +221,13 @@ func (Systemd) Logs(w io.Writer, n int) error {
 
 // Remove implements Runtime.
 func (s Systemd) Remove() error {
-	_ = systemctl("disable", "--now", timerUnit, caddyUnit, vaultUnit)
+	_ = systemctl("disable", "--now", certTimer, timerUnit, caddyUnit, vaultUnit)
 	s.restoreLinger()
 	dir, err := unitDir()
 	if err != nil {
 		return err
 	}
-	for _, name := range []string{vaultUnit, caddyUnit, backupUnit, timerUnit} {
+	for _, name := range []string{vaultUnit, caddyUnit, backupUnit, timerUnit, certUnit, certTimer} {
 		if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}

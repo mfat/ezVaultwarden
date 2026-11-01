@@ -1,0 +1,265 @@
+package cli
+
+import (
+	"bytes"
+	"context"
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
+	"flag"
+	"fmt"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	goruntime "runtime"
+	"strings"
+	"time"
+
+	"github.com/mfat/ezVaultwarden/internal/config"
+	"github.com/mfat/ezVaultwarden/internal/fetch"
+)
+
+// The name reaches the Caddyfile and lego's arguments, so only a plain hostname
+// gets through.
+var validHost = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$`)
+
+func (a *app) exposeLAN(ctx context.Context, s config.State, args []string) error {
+	fs := flag.NewFlagSet("expose lan", flag.ContinueOnError)
+	domain := fs.String("domain", "", "name for the vault, such as vault.example.com")
+	dns := fs.String("dns", "cloudflare", "DNS provider that hosts the domain")
+	assume := fs.Bool("yes", false, "don't ask for confirmation")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	host := strings.ToLower(*domain)
+	if !validHost.MatchString(host) {
+		return errors.New("name the vault with: ezvaultwarden expose lan --domain vault.example.com")
+	}
+	if *dns != "cloudflare" {
+		return fmt.Errorf("%s isn't supported yet. Only cloudflare is", *dns)
+	}
+	if !s.SignupsClosed {
+		return errors.New("signups are still open, so anyone who reaches this could register. Finish with: ezvaultwarden init")
+	}
+	fmt.Fprintf(a.out, "This makes your vault login page reachable from every device on your network,\n")
+	fmt.Fprintf(a.out, "at https://%s:%d. Nothing is opened to the internet by this.\n", host, s.Port)
+	fmt.Fprintf(a.out, "The name %s goes into public certificate logs.\n", host)
+	fmt.Fprintln(a.out, "Continuing accepts Let's Encrypt's terms: https://letsencrypt.org/repository/")
+	if !*assume {
+		yes, err := a.confirm("Continue?", false)
+		if err != nil {
+			return err
+		}
+		if !yes {
+			return errors.New("nothing changed")
+		}
+	}
+	if err := a.saveDNSToken(); err != nil {
+		return err
+	}
+	fmt.Fprintln(a.out, "  Requesting a certificate. This can take a minute or two...")
+	if err := a.issue(ctx, host); err != nil {
+		// A rejected token would otherwise be reused with no way to retype it.
+		if s.Mode != "lan" {
+			if forgetErr := a.forgetDNSToken(); forgetErr != nil {
+				a.warn("Couldn't delete the DNS token at %s: %v", a.paths.DNSToken(), forgetErr)
+			}
+		}
+		return err
+	}
+	a.ok("Certificate issued for %s, renews automatically", host)
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	if err := a.rt.Install(self); err != nil {
+		return err
+	}
+	before := s
+	s.Mode, s.Hostname = "lan", host
+	if err := a.applyMode(ctx, s); err != nil {
+		if undoErr := a.applyMode(ctx, before); undoErr != nil {
+			a.warn("Couldn't go back to the previous address: %v", undoErr)
+		}
+		return err
+	}
+	if before.Mode == "tailnet" {
+		if err := a.ts.StopServing(ctx); err != nil {
+			a.warn("Couldn't stop Tailscale serving the vault: %v", err)
+		}
+	}
+	a.ok("Available on your network at %s", s.URL())
+	a.warn("Apps set to the old address need the new one. See: ezvaultwarden connect")
+	a.pointDNS(host, s.Port)
+	return nil
+}
+
+// saveDNSToken keeps the token for renewals, owner-only, and reuses one saved
+// by an earlier run.
+func (a *app) saveDNSToken() error {
+	if _, err := os.Stat(a.paths.DNSToken()); err == nil {
+		return nil
+	}
+	fmt.Fprintln(a.out, "Create a Cloudflare API token with Zone:Read and DNS:Edit for this domain.")
+	token, err := a.secret("Cloudflare API token: ")
+	if err != nil {
+		return err
+	}
+	if token == "" {
+		return errors.New("no token, so nothing changed")
+	}
+	return config.WritePrivate(a.paths.DNSToken(), []byte(token))
+}
+
+func (a *app) forgetDNSToken() error {
+	if err := os.Remove(a.paths.DNSToken()); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// pointDNS only advises: the record is the user's, and the name may resolve
+// differently inside their network.
+func (a *app) pointDNS(host string, port int) {
+	ip := outboundIP()
+	found, err := net.LookupHost(host)
+	if err == nil && ip != "" {
+		for _, addr := range found {
+			if addr == ip {
+				a.ok("%s points to this machine", host)
+				a.firewallNote(port)
+				return
+			}
+		}
+	}
+	a.warn("%s doesn't point to this machine yet. In Cloudflare, add a DNS-only record:", host)
+	fmt.Fprintf(a.out, "  A  %s  %s\n", host, ip)
+	a.firewallNote(port)
+}
+
+func (a *app) firewallNote(port int) {
+	fmt.Fprintf(a.out, "  If a firewall is on, allow port %d from your network.\n", port)
+}
+
+// outboundIP finds the address this machine uses on its network. Dialing UDP
+// sends nothing.
+func outboundIP() string {
+	conn, err := net.Dial("udp", "192.0.2.1:9")
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	if addr, ok := conn.LocalAddr().(*net.UDPAddr); ok {
+		return addr.IP.String()
+	}
+	return ""
+}
+
+// issueCert gets or renews the certificate. lego reads the token from its file,
+// so it never shows up in a process list. Run again, it only acts when renewal
+// is due.
+func (a *app) issueCert(ctx context.Context, host string) error {
+	lego, err := a.fetchLego(ctx)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, lego, "run", "--accept-tos", "--dns", "cloudflare",
+		"--domains", host, "--path", a.paths.Lego(), "--log.format", "text")
+	cmd.Env = append(os.Environ(), "CLOUDFLARE_DNS_API_TOKEN_FILE="+a.paths.DNSToken())
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("the certificate request failed: %w\n%s", err, lastLines(out, 5))
+	}
+	return nil
+}
+
+func lastLines(out []byte, n int) string {
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
+}
+
+// fetchLego returns the pinned lego, downloading it the first time. As with
+// versions/, the folder only appears once complete and verified.
+func (a *app) fetchLego(ctx context.Context) (string, error) {
+	final := filepath.Join(a.paths.Tools(), "lego-"+fetch.LegoVersion)
+	binary := filepath.Join(final, "lego")
+	if _, err := os.Stat(final); err == nil {
+		return binary, nil
+	}
+	url, sum, err := fetch.LegoRelease(goruntime.GOARCH)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(a.paths.Tools(), 0o700); err != nil {
+		return "", err
+	}
+	staged, err := os.MkdirTemp(a.paths.Tools(), ".download-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(staged)
+	if err := fetch.ExtractLego(ctx, url, sum, staged, a.progress("lego")); err != nil {
+		return "", fmt.Errorf("downloading lego: %w", err)
+	}
+	if err := os.Chmod(staged, 0o755); err != nil {
+		return "", err
+	}
+	return binary, os.Rename(staged, final)
+}
+
+// renewCert runs daily. Caddy only reads the files at start, so it restarts
+// when they change.
+func (a *app) renewCert([]string) error {
+	s, err := a.load()
+	if err != nil {
+		return err
+	}
+	if s.Mode != "lan" {
+		return nil
+	}
+	before, err := os.ReadFile(a.paths.CertFile(s.Hostname))
+	if err != nil {
+		return err
+	}
+	if err := a.issue(context.Background(), s.Hostname); err != nil {
+		return err
+	}
+	after, err := os.ReadFile(a.paths.CertFile(s.Hostname))
+	if err != nil {
+		return err
+	}
+	if bytes.Equal(before, after) {
+		return nil
+	}
+	return a.rt.RestartProxy()
+}
+
+// certProblem warns before an expired certificate locks every client out. A
+// healthy certificate renews weeks ahead, so two weeks left means renewal is
+// failing.
+func (a *app) certProblem(s config.State) string {
+	if s.Mode != "lan" {
+		return ""
+	}
+	raw, err := os.ReadFile(a.paths.CertFile(s.Hostname))
+	if err != nil {
+		return "The certificate is missing. Fix it with: ezvaultwarden expose lan --domain " + s.Hostname
+	}
+	block, _ := pem.Decode(raw)
+	if block == nil {
+		return "The certificate can't be read: " + a.paths.CertFile(s.Hostname)
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "The certificate can't be read: " + a.paths.CertFile(s.Hostname)
+	}
+	if left := cert.NotAfter.Sub(a.now()); left < 14*24*time.Hour {
+		return fmt.Sprintf("The certificate expires on %s and isn't renewing. See: journalctl --user -u ezvaultwarden-cert",
+			cert.NotAfter.Format("2006-01-02"))
+	}
+	return ""
+}

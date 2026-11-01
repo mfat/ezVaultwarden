@@ -54,6 +54,17 @@ bypasses Caddy. We ask the user to run the `sudo` step, and never run it ourselv
 
 If Caddy has to see all traffic, say for rate limits, switch to Caddy's integration.
 
+## `lego` for the DNS challenge
+
+Official Caddy has no DNS plugins, and a custom build would lose its published
+checksums, so `lego` gets the certificate and Caddy just serves the files. It's only
+downloaded on the first `expose lan`, and stays out of `VersionID`, so people who never
+use it don't pay for it and a `lego` bump doesn't force a Vaultwarden update.
+
+The token stays in a file `lego` reads itself, so it's never in a process list. We
+register no email: Let's Encrypt has stopped sending expiry mail, so `status` warns
+instead.
+
 ## Backups encrypted to a public key
 
 The first design used a word passphrase. That would have meant storing a secret on

@@ -148,12 +148,19 @@ This makes your vault login page reachable by anyone.
 Fix these first, or re-run with --accept-risk.
 ```
 
-## Real certificates *(planned)*
+## Real certificates
 
 ```text
-$ ezvaultwarden cert --domain vault.example.com --dns cloudflare
-Cloudflare API token (DNS edit only): ****
-✓ Certificate issued, renews automatically
+$ ezvaultwarden expose lan --domain vault.example.com --dns cloudflare
+This makes your vault login page reachable from every device on your network,
+at https://vault.example.com:8443. Nothing is opened to the internet by this.
+The name vault.example.com goes into public certificate logs.
+Continuing accepts Let's Encrypt's terms: https://letsencrypt.org/repository/
+Continue? [y/N] y
+Create a Cloudflare API token with Zone:Read and DNS:Edit for this domain.
+Cloudflare API token:
+✓ Certificate issued for vault.example.com, renews automatically
+✓ Available on your network at https://vault.example.com:8443
 ```
 
 ## What can't be fully smooth
@@ -166,6 +173,8 @@ Cloudflare API token (DNS edit only): ****
 - **Tailscale setup.** `expose tailnet` needs MagicDNS and HTTPS turned on in the
   Tailscale admin console, plus one `sudo tailscale set --operator=$USER`. It names
   each step when it's missing. The machine's name ends up in public certificate logs.
+- **DNS and firewall for `lan`.** The user adds a DNS-only record pointing at the
+  machine, and may need to allow the port. We say so, but don't change either.
 - **`curl | sh`.** Convenient, but some people won't like it, so manual download
   stays documented.
 - **WSL.** Windows browsers need the certificate imported by hand, and WSL can stop

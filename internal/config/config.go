@@ -45,6 +45,15 @@ func (p Paths) CaddyData() string  { return p.join("caddy") }
 func (p Paths) Caddyfile() string  { return p.join("Caddyfile") }
 func (p Paths) VaultEnv() string   { return p.join("vaultwarden.env") }
 func (p Paths) PendingKey() string { return p.join("backup-key.pending") }
+func (p Paths) Tools() string      { return p.join("tools") }
+func (p Paths) Lego() string       { return p.join("lego") }
+func (p Paths) DNSToken() string   { return p.join("dns-token") }
+func (p Paths) CertFile(host string) string {
+	return p.join("lego", "certificates", host+".crt")
+}
+func (p Paths) CertKey(host string) string {
+	return p.join("lego", "certificates", host+".key")
+}
 func (p Paths) RootCert() string {
 	return p.join("caddy", "pki", "authorities", "local", "root.crt")
 }
@@ -74,8 +83,11 @@ type Previous struct {
 
 // URL is the address clients use.
 func (s State) URL() string {
-	if s.Mode == "tailnet" {
+	switch s.Mode {
+	case "tailnet":
 		return "https://" + s.Hostname
+	case "lan":
+		return fmt.Sprintf("https://%s:%d", s.Hostname, s.Port)
 	}
 	return s.LocalURL()
 }
@@ -146,8 +158,19 @@ func VaultwardenEnv(p Paths, s State) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-// Caddyfile renders the TLS front end for local mode.
+// Caddyfile renders the TLS front end. The localhost site stays in every mode,
+// because health checks use it. Only lan mode listens beyond this machine.
 func Caddyfile(p Paths, s State) string {
+	bind, lan := "\tbind 127.0.0.1\n", ""
+	if s.Mode == "lan" {
+		bind = ""
+		lan = fmt.Sprintf(`
+https://%s:%d {
+	tls %q %q
+	reverse_proxy 127.0.0.1:%d
+}
+`, s.Hostname, s.Port, p.CertFile(s.Hostname), p.CertKey(s.Hostname), s.BackendPort)
+	}
 	return fmt.Sprintf(`{
 	admin off
 	persist_config off
@@ -159,11 +182,10 @@ func Caddyfile(p Paths, s State) string {
 }
 
 https://localhost:%d {
-	bind 127.0.0.1
-	tls internal
+%s	tls internal
 	reverse_proxy 127.0.0.1:%d
 }
-`, p.CaddyData(), s.Port, s.BackendPort)
+%s`, p.CaddyData(), s.Port, bind, s.BackendPort, lan)
 }
 
 // Write renders every generated file from the state.

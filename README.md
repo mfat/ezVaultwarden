@@ -48,7 +48,7 @@ Then run `ezvaultwarden init`.
 | Temporary admin page | Working, needs real-world use |
 | Docker and Podman | Planned |
 | `tailnet` mode | In progress |
-| `lan` mode | Planned |
+| `lan` mode, with Let's Encrypt over Cloudflare DNS | In progress |
 | `public` mode with Let's Encrypt | Planned |
 | Local web dashboard | Planned |
 

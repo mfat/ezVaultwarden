@@ -31,7 +31,7 @@ const usage = `ezVaultwarden: run your own Vaultwarden.
   init        Set everything up
   status      Show what's running
   connect     Show how to connect apps and the bw CLI
-  expose      Choose who can reach it: tailnet or local
+  expose      Choose who can reach it: tailnet, lan or local
   start       Start the server
   stop        Stop the server
   backup      Make an encrypted backup now
@@ -56,6 +56,7 @@ type app struct {
 	health    func(context.Context, config.State) error
 	reachable func(ctx context.Context, url string) error
 	ts        tailnet
+	issue     func(ctx context.Context, host string) error
 }
 
 // Run executes one command and returns the process exit code.
@@ -76,6 +77,7 @@ func Run(args []string) int {
 		ts:        tailscale.New(),
 	}
 	a.health = a.verify
+	a.issue = a.issueCert
 	if len(args) == 0 {
 		fmt.Fprint(a.out, usage)
 		return 0
@@ -94,6 +96,8 @@ func Run(args []string) int {
 		"admin":     a.admin,
 		"logs":      a.logs,
 		"uninstall": a.uninstall,
+
+		"renew-cert": a.renewCert, // run by the timer
 		"version": func([]string) error {
 			fmt.Fprintln(a.out, "ezVaultwarden", Version)
 			return nil
@@ -267,6 +271,9 @@ func (a *app) status(args []string) error {
 		if target, err := a.ts.Proxying(context.Background(), s.Hostname); err != nil || target == "" {
 			a.warn("Tailscale isn't serving the vault. Fix it with: ezvaultwarden expose tailnet")
 		}
+	}
+	if problem := a.certProblem(s); problem != "" {
+		a.warn("%s", problem)
 	}
 	for _, problem := range overrides {
 		a.warn("%s", problem)

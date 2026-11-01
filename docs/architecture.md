@@ -26,6 +26,10 @@ machine's tailnet name and forwards to Vaultwarden directly. Caddy keeps running
 `localhost`, because health checks use it in every mode. `DOMAIN` follows the mode,
 so the server restarts when the mode changes.
 
+`expose lan` keeps Caddy as the way in, but drops its loopback bind so it listens on
+every interface, and adds a site for the user's domain using `lego`'s certificate.
+It stays on the same port, because 443 would need root.
+
 ## Code layout
 
 | Package | Job |
@@ -58,10 +62,15 @@ Everything lives in `~/.local/share/ezvaultwarden`, or `$EZVAULTWARDEN_HOME`.
 | `data.before-update` | Plain copy for rollback, replaced each update |
 | `data.before-restore-*`, `data.replaced-*` | Plain copies. Not yet cleaned up |
 | `backup-key.pending` | Only until the user confirms saving the key |
+| `lego/` | `lego`'s account and the certificate, in `lan` mode |
+| `dns-token` | Cloudflare token for renewals, owner-only. Removed by `expose local` and `uninstall` |
+| `tools/lego-<version>/` | Fetched by the first `expose lan`, then verified the same way |
 | `linger-enabled` | Marks that we turned on lingering, so `uninstall` can undo it |
 
 Units live in `~/.config/systemd/user`: `ezvaultwarden-server`,
-`ezvaultwarden-proxy`, and the `ezvaultwarden-backup` service and timer.
+`ezvaultwarden-proxy`, and a service and timer each for `ezvaultwarden-backup` and
+`ezvaultwarden-cert`. The certificate timer runs daily and does nothing outside `lan`
+mode. Caddy reads certificate files only at start, so it restarts after a renewal.
 
 ## Downloads
 

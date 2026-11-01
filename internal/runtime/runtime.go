@@ -19,6 +19,8 @@ type Runtime interface {
 	StartVault() error
 	StopVault() error
 	RestartVault() error
+	// RestartProxy reloads the Caddyfile and certificates.
+	RestartProxy() error
 	// Running reports whether both services are up.
 	Running() bool
 	// Logs writes the last n lines to w.

@@ -30,6 +30,7 @@ func (f *fakeRuntime) Start() error            { f.running = true; return nil }
 func (f *fakeRuntime) Stop() error             { f.running = false; return nil }
 func (f *fakeRuntime) StopVault() error        { f.running = false; f.stops++; return nil }
 func (f *fakeRuntime) RestartVault() error     { f.running = true; return nil }
+func (*fakeRuntime) RestartProxy() error       { return nil }
 func (f *fakeRuntime) Running() bool           { return f.running }
 func (*fakeRuntime) Logs(io.Writer, int) error { return nil }
 func (f *fakeRuntime) Remove() error           { f.removed = true; return nil }
@@ -47,6 +48,8 @@ type harness struct {
 	output *bytes.Buffer
 	secret string
 }
+
+func reader(input string) *bufio.Reader { return bufio.NewReader(strings.NewReader(input)) }
 
 func setup(t *testing.T, input string) *harness {
 	t.Helper()
@@ -69,7 +72,7 @@ func setup(t *testing.T, input string) *harness {
 	out := &bytes.Buffer{}
 	return &harness{
 		app: &app{
-			out: out, in: bufio.NewReader(strings.NewReader(input)), paths: paths, rt: rt,
+			out: out, in: reader(input), paths: paths, rt: rt,
 			now:    func() time.Time { return time.Date(2026, 11, 1, 3, 0, 0, 0, time.UTC) },
 			health: func(context.Context, config.State) error { return nil },
 		},

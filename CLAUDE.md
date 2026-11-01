@@ -34,9 +34,9 @@ That run used v0.2.0, which still had the system certificate step.
    that nothing removes.
 4. **Fix what real use finds,** drop the README warning, release v0.3.0. That's also
    the first real test of self-update, from v0.2.0.
-5. **`tailnet` mode.** Built as `expose tailnet` from Tailscale's docs, and only tested
-   with a stand-in, so try it against real Tailscale.
-6. **Let's Encrypt over the DNS challenge.** With Cloudflare first, using `lego`.
+5. **`tailnet` mode.** `expose tailnet` works on a real tailnet.
+6. **Let's Encrypt over the DNS challenge.** `expose lan` is built with `lego` and
+   Cloudflare, and needs a real domain to prove issuing and renewal.
 
 Decided but not built: see the roadmap. WSL detection with a Windows certificate
 step is a small addition worth making alongside item 2.
@@ -58,6 +58,7 @@ step is a small addition worth making alongside item 2.
 
 ## Things that bit us
 
+- `lego` 5 has no `renew` command. `run` does both.
 - `bw` refuses plain HTTP, even on localhost.
 - `bw` keeps its cached vault after a restore or rollback. Test with a fresh login.
 - `bw` 2026.10.1 can't log in to Vaultwarden 1.37.3. New clients can break old servers.
