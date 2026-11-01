@@ -38,6 +38,7 @@ func (a *app) exposeLAN(ctx context.Context, s config.State, args []string) erro
 	domain := fs.String("domain", "", "name for the vault, such as vault.example.com")
 	dns := fs.String("dns", "cloudflare", "DNS provider that hosts the domain")
 	assume := fs.Bool("yes", false, "don't ask for confirmation")
+	acceptRisk := fs.Bool("accept-risk", false, "allow this on a machine with a public address")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -51,8 +52,17 @@ func (a *app) exposeLAN(ctx context.Context, s config.State, args []string) erro
 	if !s.SignupsClosed {
 		return errors.New("signups are still open, so anyone who reaches this could register. Finish with: ezvaultwarden init")
 	}
-	fmt.Fprintf(a.out, "This makes your vault login page reachable from every device on your network,\n")
-	fmt.Fprintf(a.out, "at https://%s:%d. Nothing is opened to the internet by this.\n", host, s.Port)
+	public := isPublic(a.localIP())
+	if public && !*acceptRisk {
+		return fmt.Errorf("this machine has a public address, %s, so this would put your vault login page "+
+			"on the internet. Use this instead: ezvaultwarden expose tailnet", a.localIP())
+	}
+	if public {
+		a.warn("This puts your vault login page on the internet, at https://%s:%d.", host, s.Port)
+	} else {
+		fmt.Fprintf(a.out, "This makes your vault login page reachable from every device on your network,\n")
+		fmt.Fprintf(a.out, "at https://%s:%d. It stays off the internet while this machine is behind a router.\n", host, s.Port)
+	}
 	fmt.Fprintf(a.out, "The name %s goes into public certificate logs, and public DNS\n", host)
 	fmt.Fprintln(a.out, "will show this machine's local address.")
 	fmt.Fprintln(a.out, "Continuing accepts Let's Encrypt's terms: https://letsencrypt.org/repository/")
@@ -179,7 +189,7 @@ func (a *app) syncDNS(ctx context.Context, s config.State, ip string) error {
 // pointDNS sets the record. The vault already works locally by then, so a failure
 // only means the user sets it by hand.
 func (a *app) pointDNS(ctx context.Context, s config.State) {
-	ip := outboundIP()
+	ip := a.localIP()
 	if ip != "" {
 		err := a.syncDNS(ctx, s, ip)
 		if err == nil {
@@ -233,6 +243,18 @@ func outboundIP() string {
 		return addr.IP.String()
 	}
 	return ""
+}
+
+// isPublic reports whether ip can be reached from the internet. 100.64.0.0/10 is
+// carrier NAT and Tailscale. A cloud machine with a private address and a mapped
+// public one looks private here, so the prompt avoids promising too much.
+func isPublic(ip string) bool {
+	addr := net.ParseIP(ip)
+	if addr == nil || addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast() {
+		return false
+	}
+	shared := net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}
+	return !shared.Contains(addr)
 }
 
 // issueCert gets or renews the certificate. lego reads the token from its file,
@@ -307,7 +329,7 @@ func (a *app) renewCert([]string) error {
 	if s.Mode != "lan" {
 		return nil
 	}
-	if ip := outboundIP(); ip != "" {
+	if ip := a.localIP(); ip != "" {
 		if err := a.syncDNS(context.Background(), s, ip); err != nil {
 			a.warn("Couldn't update the DNS record: %v", err)
 		}

@@ -80,6 +80,9 @@ Phones won't trust a private CA without manual setup, so point phone users at
 
 ### `public` mode safety
 
+Until this is built, `expose lan` refuses on a machine with a public address, unless
+the user passes `--accept-risk`, and points them to `tailnet`.
+
 `expose public` should refuse to start without 2FA on the account, a backup off this
 disk, and login rate limits, unless the user passes `--accept-risk`. `status` should
 warn loudly about pending security updates.

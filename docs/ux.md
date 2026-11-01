@@ -153,7 +153,7 @@ Fix these first, or re-run with --accept-risk.
 ```text
 $ ezvaultwarden expose lan --domain vault.example.com --dns cloudflare
 This makes your vault login page reachable from every device on your network,
-at https://vault.example.com:8443. Nothing is opened to the internet by this.
+at https://vault.example.com:8443. It stays off the internet while this machine is behind a router.
 The name vault.example.com goes into public certificate logs, and public DNS
 will show this machine's local address.
 Continuing accepts Let's Encrypt's terms: https://letsencrypt.org/repository/

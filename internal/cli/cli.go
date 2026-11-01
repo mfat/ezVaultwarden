@@ -62,6 +62,7 @@ type app struct {
 	dns       func(token string) dnsHost
 	openLink  func(url string)
 	lookup    func(host string) ([]string, error)
+	localIP   func() string
 }
 
 // Run executes one command and returns the process exit code.
@@ -86,6 +87,7 @@ func Run(args []string) int {
 	a.dns = func(token string) dnsHost { return cloudflare.New(token) }
 	a.openLink = openBrowser
 	a.lookup = net.LookupHost
+	a.localIP = outboundIP
 	if len(args) == 0 {
 		fmt.Fprint(a.out, usage)
 		return 0

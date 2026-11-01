@@ -54,6 +54,7 @@ func lanSetupDNS(t *testing.T, input string) (*harness, *fakeTailnet, *fakeDNS, 
 	}
 	h.openLink = func(string) { dns.opened++ }
 	h.lookup = func(string) ([]string, error) { return []string{"192.168.1.20"}, nil }
+	h.localIP = func() string { return "192.168.1.20" }
 	issued := new(int)
 	h.issue = func(_ context.Context, host string) error {
 		*issued++
@@ -264,15 +265,12 @@ func TestExposeLANSetsTheDNSRecord(t *testing.T) {
 	if err := h.expose(lanArgs()); err != nil {
 		t.Fatal(err)
 	}
-	if outboundIP() != "" && (len(dns.points) != 1 || !strings.HasPrefix(dns.points[0], domain+"=")) {
+	if len(dns.points) != 1 || dns.points[0] != domain+"=192.168.1.20" {
 		t.Fatalf("points: %v", dns.points)
 	}
 }
 
 func TestABlockedNameIsReportedInsteadOfCelebrated(t *testing.T) {
-	if outboundIP() == "" {
-		t.Skip("no network")
-	}
 	h, _, _, _ := lanSetupDNS(t, "y\ntoken\n")
 	h.lookup = func(string) ([]string, error) { return nil, errors.New("no such host") }
 	if err := h.expose(lanArgs()); err != nil {
@@ -291,9 +289,6 @@ func TestABlockedNameIsReportedInsteadOfCelebrated(t *testing.T) {
 }
 
 func TestAFailedDNSRecordFallsBackToInstructions(t *testing.T) {
-	if outboundIP() == "" {
-		t.Skip("no network")
-	}
 	h, _, dns, _ := lanSetupDNS(t, "y\ntoken\n")
 	dns.pointErr = errors.New("left alone")
 	if err := h.expose(lanArgs()); err != nil {
@@ -320,9 +315,6 @@ func TestLeavingLANRemovesTheRecordAndToken(t *testing.T) {
 }
 
 func TestRenewalFollowsTheAddressHourlyButChecksTheCertDaily(t *testing.T) {
-	if outboundIP() == "" {
-		t.Skip("no network")
-	}
 	h, _, dns, issued := lanSetupDNS(t, "y\ntoken\n")
 	if err := h.expose(lanArgs()); err != nil {
 		t.Fatal(err)
@@ -371,5 +363,40 @@ func TestCertificatesDontDependOnLocalDNS(t *testing.T) {
 	args := strings.Join(legoArgs(domain, "/data"), " ")
 	if !strings.Contains(args, "--dns.propagation.wait 30s") {
 		t.Fatalf("a network that intercepts DNS would break this: %s", args)
+	}
+}
+
+func TestPublicMachinesAreSentToTailnet(t *testing.T) {
+	h, _, _, issued := lanSetupDNS(t, "y\ntoken\n")
+	h.localIP = func() string { return "203.0.113.7" }
+	err := h.expose(lanArgs())
+	if err == nil || !strings.Contains(err.Error(), "expose tailnet") || *issued != 0 {
+		t.Fatalf("err %v, issued %d", err, *issued)
+	}
+	if s, _ := h.load(); s.Mode != "local" {
+		t.Fatalf("mode changed to %s", s.Mode)
+	}
+}
+
+func TestAcceptRiskSaysWhatItDoes(t *testing.T) {
+	h, _, _, issued := lanSetupDNS(t, "y\ntoken\n")
+	h.localIP = func() string { return "203.0.113.7" }
+	if err := h.expose(append(lanArgs(), "--accept-risk")); err != nil || *issued != 1 {
+		t.Fatalf("err %v, issued %d", err, *issued)
+	}
+	if !strings.Contains(h.output.String(), "on the internet") {
+		t.Fatalf("no warning: %s", h.output)
+	}
+}
+
+func TestIsPublic(t *testing.T) {
+	cases := map[string]bool{
+		"203.0.113.7": true, "198.51.100.20": true, "192.168.1.20": false, "10.0.0.5": false,
+		"172.16.0.1": false, "100.64.0.1": false, "127.0.0.1": false, "": false,
+	}
+	for ip, want := range cases {
+		if got := isPublic(ip); got != want {
+			t.Errorf("%q: got %v", ip, got)
+		}
 	}
 }
