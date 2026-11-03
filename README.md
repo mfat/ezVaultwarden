@@ -28,6 +28,21 @@ or read [install.sh](install.sh) first.
 
 Then run `ezvaultwarden init`.
 
+### Requirements
+
+- Linux with systemd, on 64-bit Intel/AMD (`x86_64`) or ARM (`aarch64`). The downloads
+  are static binaries, so any such distribution should work: Ubuntu, Debian, Fedora, RHEL
+  and its rebuilds, openSUSE, Arch, and 64-bit Raspberry Pi OS. It has been tested on
+  Ubuntu 24.04 and on WSL.
+- `curl` and `sha256sum` for the installer.
+- On WSL, systemd turned on in `/etc/wsl.conf`.
+- Tailscale access needs Tailscale installed and signed in. Public access needs your own
+  domain and port 443; setup shows the one command that lets a normal user use port 443.
+
+It won't run on distributions without systemd (Alpine, Void, Devuan, Artix), on 32-bit
+systems, in containers that don't run systemd, or on macOS. Docker and Podman support is
+planned.
+
 ## Why
 
 - **No containers needed.** On Linux it runs the official static binaries as
