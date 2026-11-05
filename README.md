@@ -1,19 +1,6 @@
 # ezVaultwarden
 
-One command to run your own [Vaultwarden](https://github.com/dani-garcia/vaultwarden).
-
-> **Early development.** Not ready for your real passwords yet. ezVaultwarden is an
-> independent project, not affiliated with Vaultwarden or Bitwarden.
-
-```text
-$ ezvaultwarden init
-✓ Vaultwarden, web vault and Caddy downloaded and verified
-✓ Service started at https://localhost:8443
-
-Open https://localhost:8443 and create your account.
-✓ Account created
-✓ Signups closed, nobody else can register
-```
+One command to run your own [Vaultwarden](https://github.com/dani-garcia/vaultwarden) with your domain and HTTPS or Tailscale.
 
 ## Install
 
